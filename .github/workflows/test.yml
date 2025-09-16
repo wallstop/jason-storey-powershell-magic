@@ -100,7 +100,7 @@ jobs:
           exit 1
         }
 
-        Write-Host "All modules imported successfully!" -ForegroundColor Green
+        Write-Host 'All modules imported successfully!' -ForegroundColor Green
 
         if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }
 
