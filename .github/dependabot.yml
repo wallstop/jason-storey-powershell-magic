@@ -1,0 +1,41 @@
+version: 2
+updates:
+  # npm dependencies
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    reviewers:
+      - "wallstop"
+    assignees:
+      - "wallstop"
+
+  # PowerShell Gallery modules
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    reviewers:
+      - "wallstop"
+    assignees:
+      - "wallstop"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    reviewers:
+      - "wallstop"
+    assignees:
+      - "wallstop"
+
+  # Docker (if any Dockerfiles exist)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    reviewers:
+      - "wallstop"
+    assignees:
+      - "wallstop"
