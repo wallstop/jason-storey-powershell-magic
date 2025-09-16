@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(pwsh:*)"
+      "Bash(pwsh:*)",
+      "Bash(mkdir:*)",
+      "Bash(powershell:*)",
+      "Bash(.Run-Tests.ps1)"
     ],
     "deny": [],
     "ask": []

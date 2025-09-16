@@ -573,7 +573,7 @@ function Get-Templates {
             $tags = if ($template.Tags -and $template.Tags.Count -gt 0) { '[' + ($template.Tags -join ',') + ']' } else { '' }
 
             # Format: "alias | description | category | Get-Content | usage | last_used | tags | path | preview_file"
-            $fzfItems += "$alias | $($template.Description) | $($template.Category) | $($template.Type) | ${useCount} uses | $lastUsed | $tags | $($template.Path) | $(if ($template.PreviewFile) { $template.PreviewFile } else { '' })"
+            $fzfItems += @("$alias", "$($template.Description)", "$($template.Category)", "$($template.Type)", "${useCount} uses", "$lastUsed", "$tags", "$($template.Path)", "$(if ($template.PreviewFile) { $template.PreviewFile } else { '' })") -join ' | '
         }
 
         if ($fzfItems.Count -eq 0) {

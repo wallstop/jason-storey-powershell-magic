@@ -598,14 +598,14 @@ function Get-QuickJumpPaths {
                 }
             }
 
-            $fzfItems += "$alias$displayPath$category | $useCount | $lastUsed | $($_.path)"
+            $fzfItems += @("$alias$displayPath$category", "$useCount", "$lastUsed", "$($_.path)") -join ' | '
         }
 
         try {
             $headerText = if ($Path) { 'Select Path (will return path)' } else { 'Select Path to Jump To' }
             if ($Category) { $headerText += " - Category: $Category" }
 
-            $selected = $fzfItems | fzf --height=60% --reverse --border --header="$headerText" --delimiter="|" --with-nth=1, 2, 3 --preview="eza -la {4} 2>/dev/null || ls -la {4} 2>/dev/null || Get-ChildItem {4} 2>nul"
+            $selected = $fzfItems | & fzf --height=60% --reverse --border --header="$headerText" --delimiter="|" --with-nth="1,2,3" --preview="eza -la {4} 2>/dev/null || ls -la {4} 2>/dev/null || Get-ChildItem {4} 2>nul"
 
             if ($selected) {
                 $selectedPath = ($selected -split ' \| ')[-1].Trim()  # Last part is the full path

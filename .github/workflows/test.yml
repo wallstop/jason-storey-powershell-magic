@@ -1,0 +1,197 @@
+name: PowerShell Magic CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    name: Test PowerShell Magic
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup PowerShell
+      shell: powershell
+      run: |
+        Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
+        Write-Host "OS Version: $($PSVersionTable.OS)"
+
+    - name: Run formatting checks
+      shell: powershell
+      run: |
+        Write-Host "Running PowerShell formatting checks..." -ForegroundColor Cyan
+        .\Format-PowerShell.ps1 -Check
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Formatting check failed"
+          exit $LASTEXITCODE
+        }
+
+    - name: Run unit tests
+      shell: powershell
+      run: |
+        Write-Host "Running PowerShell unit tests..." -ForegroundColor Cyan
+        .\Tests\Test-PowerShellMagic.ps1
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Unit tests failed"
+          exit $LASTEXITCODE
+        }
+
+    - name: Run comprehensive test suite
+      shell: powershell
+      run: |
+        Write-Host "Running comprehensive test suite..." -ForegroundColor Cyan
+        .\Run-Tests.ps1 -CI
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Test suite failed"
+          exit $LASTEXITCODE
+        }
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: |
+          **/*.log
+          **/*.xml
+        retention-days: 7
+
+  validate-modules:
+    name: Validate PowerShell Modules
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Test module imports
+      shell: powershell
+      run: |
+        Write-Host "Testing PowerShell module imports..." -ForegroundColor Cyan
+
+        $modules = @(
+          ".\Modules\QuickJump\QuickJump.psm1",
+          ".\Modules\Templater\Templater.psm1",
+          ".\Modules\Unitea\Unitea.psm1"
+        )
+
+        $success = $true
+
+        foreach ($module in $modules) {
+          try {
+            Write-Host "Testing import: $module" -ForegroundColor Yellow
+            Import-Module $module -Force -ErrorAction Stop
+            Write-Host "✓ Successfully imported: $module" -ForegroundColor Green
+            Remove-Module (Split-Path $module -LeafBase) -Force -ErrorAction SilentlyContinue
+          }
+          catch {
+            Write-Error "✗ Failed to import: $module - $($_.Exception.Message)"
+            $success = $false
+          }
+        }
+
+        if (-not $success) {
+          Write-Error "Module validation failed"
+          exit 1
+        }
+
+        Write-Host "All modules imported successfully!" -ForegroundColor Green
+
+  security-scan:
+    name: Security Scan
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Run PSScriptAnalyzer security rules
+      shell: powershell
+      run: |
+        Write-Host "Running security analysis..." -ForegroundColor Cyan
+
+        # Install PSScriptAnalyzer if not available
+        if (!(Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
+          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
+        }
+
+        # Get all PowerShell files
+        $files = Get-ChildItem -Recurse -Include "*.ps1", "*.psm1", "*.psd1" | Where-Object {
+          $_.FullName -notmatch "\\\.git\\" -and
+          $_.FullName -notmatch "\\bin\\" -and
+          $_.FullName -notmatch "\\obj\\"
+        }
+
+        $criticalIssues = @()
+
+        foreach ($file in $files) {
+          Write-Host "Scanning: $($file.Name)" -ForegroundColor Yellow
+
+          $results = Invoke-ScriptAnalyzer -Path $file.FullName -Severity Error, Warning
+          $securityIssues = $results | Where-Object { $_.RuleName -like "*Security*" -or $_.Severity -eq "Error" }
+
+          if ($securityIssues) {
+            $criticalIssues += $securityIssues
+            foreach ($issue in $securityIssues) {
+              Write-Warning "$($file.Name):$($issue.Line) - $($issue.RuleName): $($issue.Message)"
+            }
+          }
+        }
+
+        if ($criticalIssues.Count -gt 0) {
+          Write-Error "Security scan found $($criticalIssues.Count) critical issues"
+          exit 1
+        }
+
+        Write-Host "Security scan completed successfully!" -ForegroundColor Green
+
+  matrix-test:
+    name: Cross-Platform Compatibility
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Test PowerShell syntax
+      shell: pwsh
+      run: |
+        Write-Host "Testing PowerShell syntax on $($PSVersionTable.OS)" -ForegroundColor Cyan
+
+        # Get all PowerShell files
+        $files = Get-ChildItem -Recurse -Include "*.ps1", "*.psm1", "*.psd1" | Where-Object {
+          $_.FullName -notmatch "[/\\]\.git[/\\]" -and
+          $_.FullName -notmatch "[/\\]bin[/\\]" -and
+          $_.FullName -notmatch "[/\\]obj[/\\]"
+        }
+
+        $syntaxErrors = @()
+
+        foreach ($file in $files) {
+          try {
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$null, [ref]$null)
+            if ($null -eq $ast) {
+              $syntaxErrors += "Failed to parse: $($file.Name)"
+            }
+            Write-Host "✓ Syntax OK: $($file.Name)" -ForegroundColor Green
+          }
+          catch {
+            $syntaxErrors += "$($file.Name): $($_.Exception.Message)"
+            Write-Error "✗ Syntax Error: $($file.Name) - $($_.Exception.Message)"
+          }
+        }
+
+        if ($syntaxErrors.Count -gt 0) {
+          Write-Error "Found $($syntaxErrors.Count) syntax errors"
+          exit 1
+        }
+
+        Write-Host "All files have valid PowerShell syntax!" -ForegroundColor Green

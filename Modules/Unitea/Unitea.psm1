@@ -243,7 +243,7 @@ function Get-UnityProjects {
     Uses fzf to select and open a project
 
     .EXAMPLE
-    Get-UnityProjects -Alias 'myGame" -Path
+    Get-UnityProjects -Alias 'myGame' -Path
     Returns the path of the project with alias "myGame"
 
     .EXAMPLE
@@ -314,7 +314,7 @@ function Get-UnityProjects {
             $project = $_.Value
             $lastOpened = if ($project.LastOpened -eq 'Never') { 'Never' } else { $project.LastOpened }
             # Format: "alias | project_name | unity_version | last_opened | path"
-            $fzfItems += "$alias | $($project.Name) | $($project.UnityVersion) | $lastOpened | $($project.Path)"
+            $fzfItems += @("$alias", "$($project.Name)", "$($project.UnityVersion)", "$lastOpened", "$($project.Path)") -join ' | '
         }
 
         if ($fzfItems.Count -eq 0) {
@@ -516,7 +516,7 @@ function Remove-UnityProject {
             $alias = $_.Key
             $project = $_.Value
             $lastOpened = if ($project.LastOpened -eq 'Never') { 'Never' } else { $project.LastOpened }
-            $fzfItems += "$alias | $($project.Name) | $lastOpened | $($project.Path)"
+            $fzfItems += @("$alias", "$($project.Name)", "$lastOpened", "$($project.Path)") -join ' | '
         }
 
         try {

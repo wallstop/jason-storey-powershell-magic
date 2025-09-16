@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 
 <#
 .SYNOPSIS
@@ -43,10 +43,10 @@ $Script:TestResults = @{
 }
 
 # Color output functions
-function Write-TestSuccess { param($Message) Write-Host "✓ $Message" -ForegroundColor Green }
-function Write-TestFailure { param($Message) Write-Host "✗ $Message" -ForegroundColor Red }
-function Write-TestInfo { param($Message) Write-Host "ℹ $Message" -ForegroundColor Cyan }
-function Write-TestWarning { param($Message) Write-Host "âš  $Message" -ForegroundColor Yellow }
+function Write-TestSuccess { param($Message) Write-Host "[PASS] $Message" -ForegroundColor Green }
+function Write-TestFailure { param($Message) Write-Host "[FAIL] $Message" -ForegroundColor Red }
+function Write-TestInfo { param($Message) Write-Host "[INFO] $Message" -ForegroundColor Cyan }
+function Write-TestWarning { param($Message) Write-Host "[WARN] $Message" -ForegroundColor Yellow }
 function Write-TestSkipped { param($Message) Write-Host "- $Message" -ForegroundColor Gray }
 
 function Assert-Equal {

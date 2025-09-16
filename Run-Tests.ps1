@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 
 <#
 .SYNOPSIS
@@ -51,10 +51,10 @@ if (-not $Format -and -not $Test) {
 }
 
 # Color output functions
-function Write-Success { param($Message) Write-Host "✓ $Message" -ForegroundColor Green }
-function Write-Info { param($Message) Write-Host "ℹ $Message" -ForegroundColor Cyan }
-function Write-Warning { param($Message) Write-Host "âš  $Message" -ForegroundColor Yellow }
-function Write-Error { param($Message) Write-Host "âœ— $Message" -ForegroundColor Red }
+function Write-Success { param($Message) Write-Host "[OK] $Message" -ForegroundColor Green }
+function Write-Info { param($Message) Write-Host "[INFO] $Message" -ForegroundColor Cyan }
+function Write-Warning { param($Message) Write-Host "[WARN] $Message" -ForegroundColor Yellow }
+function Write-Error { param($Message) Write-Host "[ERROR] $Message" -ForegroundColor Red }
 
 function Test-Prerequisites {
     Write-Info 'Checking prerequisites...'
@@ -136,9 +136,9 @@ function Show-CIInstructions {
     if ($CI) {
         Write-Host "`n=== CI Mode Information ===" -ForegroundColor Cyan
         Write-Info 'Running in CI mode:'
-        Write-Info 'â€¢ Formatting checks only (no automatic fixes)'
-        Write-Info 'â€¢ Strict exit codes for pipeline integration'
-        Write-Info 'â€¢ All issues must be resolved for success'
+        Write-Info '• Formatting checks only (no automatic fixes)'
+        Write-Info '• Strict exit codes for pipeline integration'
+        Write-Info '• All issues must be resolved for success'
     }
 }
 
@@ -178,7 +178,7 @@ function Main {
     Write-Host ("`n" + ('=' * 50)) -ForegroundColor Cyan
     if ($overallSuccess) {
         Write-Success 'All checks passed successfully!'
-        Write-Host 'Ready for commit âœ¨' -ForegroundColor Green
+        Write-Host 'Ready for commit!' -ForegroundColor Green
     } else {
         Write-Error 'Some checks failed'
         Write-Host 'Please fix the issues before committing' -ForegroundColor Red
