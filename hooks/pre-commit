@@ -1,0 +1,46 @@
+#!/bin/bash
+
+# Git pre-commit hook for PowerShell Magic
+# This hook runs formatting checks and tests before allowing commits
+
+set -e
+
+echo "🔍 Running pre-commit checks for PowerShell Magic..."
+
+# Change to repository root
+cd "$(git rev-parse --show-toplevel)"
+
+# Check if we're on Windows and have PowerShell
+if command -v powershell.exe >/dev/null 2>&1; then
+    POWERSHELL_CMD="powershell.exe"
+elif command -v pwsh >/dev/null 2>&1; then
+    POWERSHELL_CMD="pwsh"
+else
+    echo "❌ PowerShell not found. Please install PowerShell to run pre-commit hooks."
+    echo "   Download from: https://github.com/PowerShell/PowerShell"
+    exit 1
+fi
+
+# Function to run PowerShell script
+run_powershell() {
+    $POWERSHELL_CMD -ExecutionPolicy Bypass -File "$1" "${@:2}"
+}
+
+echo "📝 Checking PowerShell formatting..."
+if ! run_powershell "./Format-PowerShell.ps1" -Check; then
+    echo "❌ Formatting issues found!"
+    echo "💡 Run './Format-PowerShell.ps1 -Fix' to automatically fix formatting issues"
+    exit 1
+fi
+
+echo "🧪 Running PowerShell tests..."
+if ! run_powershell "./Run-Tests.ps1" -Test; then
+    echo "❌ Tests failed!"
+    echo "💡 Fix the failing tests before committing"
+    exit 1
+fi
+
+echo "✅ All pre-commit checks passed!"
+echo "🚀 Ready to commit"
+
+exit 0

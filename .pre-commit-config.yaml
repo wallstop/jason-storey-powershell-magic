@@ -1,0 +1,63 @@
+# Pre-commit hooks configuration for PowerShell Magic
+# See https://pre-commit.com for more information
+
+repos:
+  # PowerShell formatting and linting
+  - repo: local
+    hooks:
+      - id: powershell-format
+        name: PowerShell Formatter
+        entry: powershell.exe
+        args: ['-ExecutionPolicy', 'Bypass', '-File', './Format-PowerShell.ps1', '-Check']
+        language: system
+        files: '\.(ps1|psm1|psd1)$'
+        pass_filenames: false
+        description: 'Check PowerShell code formatting using PSScriptAnalyzer'
+
+      - id: powershell-tests
+        name: PowerShell Tests
+        entry: powershell.exe
+        args: ['-ExecutionPolicy', 'Bypass', '-File', './Run-Tests.ps1', '-Test']
+        language: system
+        files: '\.(ps1|psm1|psd1)$'
+        pass_filenames: false
+        description: 'Run PowerShell unit tests'
+
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$'
+      - id: end-of-file-fixer
+        exclude: '\.(ps1|psm1|psd1)$'  # PowerShell formatter handles this
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+
+  # Markdown formatting
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.41.0
+    hooks:
+      - id: markdownlint
+        args: ['--fix']
+        exclude: 'CHANGELOG.md'
+
+# Global configuration
+default_stages: [commit]
+fail_fast: false
+
+# Exclude patterns
+exclude: |
+  (?x)^(
+    \.git/|
+    \.vscode/|
+    \.vs/|
+    bin/|
+    obj/|
+    .*\.backup\..*|
+    Tests/.*\.expected\..*
+  )$
