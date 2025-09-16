@@ -102,6 +102,8 @@ jobs:
 
         Write-Host "All modules imported successfully!" -ForegroundColor Green
 
+        if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }
+
   security-scan:
     name: Security Scan
     runs-on: windows-latest
