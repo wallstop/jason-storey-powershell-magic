@@ -126,8 +126,8 @@ function Test-Setup {
         Assert-True -Condition ($errors.Count -eq 0) -Message 'Setup script has valid syntax'
 
         if ($errors.Count -gt 0) {
-            foreach ($error in $errors) {
-                Write-Host "  Syntax error: $($error.Message)" -ForegroundColor Red
+            foreach ($parseError in $errors) {
+                Write-Host "  Syntax error: $($parseError.Message)" -ForegroundColor Red
             }
         }
     } catch {
