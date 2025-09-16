@@ -208,7 +208,7 @@ function Add-UnityProject {
     # Save to file
     Save-UnityProjectsData -ProjectsData $projectsData
 
-    Write-Host "âœ Added Unity project '$($projectInfo.Name)' with alias '$Alias'" -ForegroundColor Green
+    Write-Host "Added Unity project '$($projectInfo.Name)' with alias '$Alias'" -ForegroundColor Green
     Write-Host "  Path: $($projectInfo.Path)" -ForegroundColor Gray
     Write-Host "  Unity Version: $($projectInfo.UnityVersion)" -ForegroundColor Gray
 }
@@ -551,13 +551,13 @@ function Remove-UnityProject {
                                 if ($projectsData.ContainsKey($aliasToRemove)) {
                                     $projectsData.Remove($aliasToRemove)
                                     $removedCount++
-                                    Write-Host "âœ Removed '$aliasToRemove'" -ForegroundColor Green
+                                    Write-Host "Removed '$aliasToRemove'" -ForegroundColor Green
                                 }
                             }
 
                             if ($removedCount -gt 0) {
                                 Save-UnityProjectsData -ProjectsData $projectsData
-                                Write-Host "`nâœ Successfully removed $removedCount projects from saved list" -ForegroundColor Green
+                                Write-Host "`nSuccessfully removed $removedCount projects from saved list" -ForegroundColor Green
                             }
                         } else {
                             Write-Host 'Removal cancelled.' -ForegroundColor Yellow
@@ -592,7 +592,7 @@ function Remove-UnityProject {
             $projectsData.Remove($Alias)
             Save-UnityProjectsData -ProjectsData $projectsData
 
-            Write-Host "âœ Removed Unity project '$Alias' from saved projects" -ForegroundColor Green
+            Write-Host "Removed Unity project '$Alias' from saved projects" -ForegroundColor Green
             Write-Host "  Project files remain at: $($project.Path)" -ForegroundColor Gray
         }
     } elseif (-not $Interactive -and -not $Alias) {

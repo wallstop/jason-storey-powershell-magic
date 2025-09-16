@@ -86,11 +86,12 @@ jobs:
           try {
             Write-Host "Testing import: $module" -ForegroundColor Yellow
             Import-Module $module -Force -ErrorAction Stop
-            Write-Host "✓ Successfully imported: $module" -ForegroundColor Green
-            Remove-Module (Split-Path $module -LeafBase) -Force -ErrorAction SilentlyContinue
+            Write-Host "Successfully imported: $module" -ForegroundColor Green
+            $moduleName = [System.IO.Path]::GetFileNameWithoutExtension($module)
+            Remove-Module $moduleName -Force -ErrorAction SilentlyContinue
           }
           catch {
-            Write-Error "✗ Failed to import: $module - $($_.Exception.Message)"
+            Write-Error "Failed to import: $module - $($_.Exception.Message)"
             $success = $false
           }
         }
@@ -183,11 +184,11 @@ jobs:
             if ($null -eq $ast) {
               $syntaxErrors += "Failed to parse: $($file.Name)"
             }
-            Write-Host "✓ Syntax OK: $($file.Name)" -ForegroundColor Green
+            Write-Host "Syntax OK: $($file.Name)" -ForegroundColor Green
           }
           catch {
             $syntaxErrors += "$($file.Name): $($_.Exception.Message)"
-            Write-Error "✗ Syntax Error: $($file.Name) - $($_.Exception.Message)"
+            Write-Error "Syntax Error: $($file.Name) - $($_.Exception.Message)"
           }
         }
 

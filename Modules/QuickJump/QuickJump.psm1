@@ -205,7 +205,7 @@ function Add-QuickJumpPath {
             # Update existing entry
             $existingEntry.alias = $Alias
             $existingEntry.category = $Category
-            Write-Host "✓ Updated path entry: $pathStr" -ForegroundColor Green
+            Write-Host "Updated path entry: $pathStr" -ForegroundColor Green
         } else {
             # Add new entry
             $newEntry = @{
@@ -217,7 +217,7 @@ function Add-QuickJumpPath {
                 useCount = 0
             }
             $config.paths = @($config.paths) + @($newEntry)
-            Write-Host "✓ Added path entry: $pathStr" -ForegroundColor Green
+            Write-Host "Added path entry: $pathStr" -ForegroundColor Green
         }
 
         if ($Alias) { Write-Host "  Alias: $Alias" -ForegroundColor Gray }
@@ -339,10 +339,10 @@ function Remove-QuickJumpPath {
                         if ($confirmation -match '^[Yy]') {
                             foreach ($entry in $pathsToRemove) {
                                 $config.paths = @($config.paths | Where-Object { $_ -ne $entry })
-                                Write-Host "✓ Removed: $($entry.path)" -ForegroundColor Green
+                                Write-Host "Removed: $($entry.path)" -ForegroundColor Green
                             }
                             Save-QuickJumpConfig -Config $config
-                            Write-Host "`n✓ Successfully removed $($pathsToRemove.Count) paths" -ForegroundColor Green
+                            Write-Host "`nSuccessfully removed $($pathsToRemove.Count) paths" -ForegroundColor Green
                         } else {
                             Write-Host 'Removal cancelled.' -ForegroundColor Yellow
                         }
@@ -403,7 +403,7 @@ function Remove-QuickJumpPath {
                     $config.paths = @($config.paths | Where-Object { $_ -ne $entryToRemove })
                     Save-QuickJumpConfig -Config $config
 
-                    Write-Host "✓ Removed path from QuickJump: $($entryToRemove.path)" -ForegroundColor Green
+                    Write-Host "Removed path from QuickJump: $($entryToRemove.path)" -ForegroundColor Green
                     if ($entryToRemove.alias) {
                         Write-Host "  Alias was: $($entryToRemove.alias)" -ForegroundColor Gray
                     }
@@ -605,7 +605,7 @@ function Get-QuickJumpPaths {
             $headerText = if ($Path) { 'Select Path (will return path)' } else { 'Select Path to Jump To' }
             if ($Category) { $headerText += " - Category: $Category" }
 
-            $selected = $fzfItems | & fzf --height=60% --reverse --border --header="$headerText" --delimiter="|" --with-nth="1,2,3" --preview="eza -la {4} 2>/dev/null || ls -la {4} 2>/dev/null || Get-ChildItem {4} 2>nul"
+            $selected = $fzfItems | & fzf --height=60% --reverse --border --header="$headerText" --delimiter="|" --with-nth="1,2,3" --preview="powershell -c `"if (Get-Command eza -ErrorAction SilentlyContinue) { eza -la '{4}' } elseif (Get-Command ls -ErrorAction SilentlyContinue) { ls -la '{4}' } else { Get-ChildItem '{4}' }`""
 
             if ($selected) {
                 $selectedPath = ($selected -split ' \| ')[-1].Trim()  # Last part is the full path

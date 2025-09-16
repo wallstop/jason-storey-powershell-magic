@@ -418,7 +418,7 @@ function Add-Template {
     # Save to file
     Save-TemplateData -TemplateData $templateData
 
-    Write-Host "âœ Added template '$Alias'" -ForegroundColor Green
+    Write-Host "Added template '$Alias'" -ForegroundColor Green
     Write-Host "  Description: $Description" -ForegroundColor Gray
     Write-Host "  Category: $Category" -ForegroundColor Gray
     Write-Host "  Type: $Type" -ForegroundColor Gray
@@ -738,7 +738,7 @@ function Use-Template {
                 'File' {
                     # Extract archive
                     $result = Extract-Archive -ArchivePath $template.Path -DestinationPath $finalDestination
-                    Write-Host 'âœ Template extracted successfully!' -ForegroundColor Green
+                    Write-Host 'Template extracted successfully!' -ForegroundColor Green
                 }
                 'Folder' {
                     # Copy folder contents
@@ -787,7 +787,7 @@ function Use-Template {
                         }
                     }
 
-                    Write-Host "âœ Template copied successfully! ($copiedItems items)" -ForegroundColor Green
+                    Write-Host "Template copied successfully! ($copiedItems items)" -ForegroundColor Green
                 }
             }
 
@@ -865,7 +865,7 @@ function Remove-Template {
         # Save updated data
         Save-TemplateData -TemplateData $templateData
 
-        Write-Host "âœ Removed template '$Alias'" -ForegroundColor Green
+        Write-Host "Removed template '$Alias'" -ForegroundColor Green
         Write-Host 'Note: The actual template files were not deleted, only the registration.' -ForegroundColor Gray
     }
 }
@@ -994,7 +994,7 @@ function Update-Template {
     $templateData[$Alias] = $template
     Save-TemplateData -TemplateData $templateData
 
-    Write-Host "âœ Template '$Alias' updated successfully!" -ForegroundColor Green
+    Write-Host "Template '$Alias' updated successfully!" -ForegroundColor Green
 }
 
 function Export-Templates {
@@ -1076,7 +1076,7 @@ function Export-Templates {
 
     try {
         $exportData | ConvertTo-Json -Depth 4 | Set-Content $Path -Encoding UTF8
-        Write-Host "âœ Exported $($exportData.Count) templates to: $Path" -ForegroundColor Green
+        Write-Host "Exported $($exportData.Count) templates to: $Path" -ForegroundColor Green
     } catch {
         Write-Error "Failed to export templates: $($_.Exception.Message)"
     }
@@ -1222,7 +1222,7 @@ function Import-Templates {
     # Save updated data
     Save-TemplateData -TemplateData $currentData
 
-    Write-Host "`nâœ Import completed!" -ForegroundColor Green
+    Write-Host "`nImport completed!" -ForegroundColor Green
     Write-Host "  New templates: $imported" -ForegroundColor Green
     Write-Host "  Overwritten: $overwritten" -ForegroundColor Yellow
     Write-Host "  Skipped: $skipped" -ForegroundColor Gray
