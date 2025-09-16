@@ -13,7 +13,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Setup PowerShell
       shell: powershell
@@ -67,7 +67,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Test module imports
       shell: powershell
@@ -111,7 +111,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Run PSScriptAnalyzer security rules
       shell: powershell
@@ -162,7 +162,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Test PowerShell syntax
       shell: pwsh
