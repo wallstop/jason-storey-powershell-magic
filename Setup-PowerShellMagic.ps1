@@ -79,7 +79,7 @@ $Dependencies = @{
         Description = 'Fuzzy finder for interactive selection'
         TestCommand = 'fzf --version'
         PortableUrl = 'https://github.com/junegunn/fzf/releases/download/v0.54.3/fzf-0.54.3-windows_amd64.zip'
-        PortableSHA256 = 'PLACEHOLDER_HASH_UPDATE_BEFORE_USE'
+        PortableSHA256 = '604D11B1C36D03675DE80D598DFE8A3EBA4F8607E0D8BBCC63734EFFDE209BB6'
         PortableExe = 'fzf.exe'
         ScoopPackage = 'fzf'
         ChocoPackage = 'fzf'
@@ -98,7 +98,7 @@ $Dependencies = @{
         Description = 'Archive extraction tool'
         TestCommand = '7z'
         PortableUrl = 'https://www.7-zip.org/a/7z2407-x64.exe'
-        PortableSHA256 = 'NOTE: 7-Zip official site does not provide checksums. Consider using package managers for verification.'
+        PortableSHA256 = 'AD12CEC3A3957FF73A689E0D65A05B6328C80FD76336A1B1A6285335F8DAB1BA'
         ScoopPackage = '7zip'
         ChocoPackage = '7zip'
         WingetPackage = '7zip.7zip'
@@ -116,8 +116,8 @@ $Dependencies = @{
         Name = 'eza'
         Description = 'Modern ls replacement with better directory previews'
         TestCommand = 'eza --version'
-        PortableUrl = 'https://github.com/eza-community/eza/releases/download/v0.18.20/eza_x86_64-pc-windows-msvc.zip'
-        PortableSHA256 = 'PLACEHOLDER_HASH_UPDATE_BEFORE_USE'
+        PortableUrl = 'https://github.com/eza-community/eza/releases/download/v0.23.3/eza.exe_x86_64-pc-windows-gnu.zip'
+        PortableSHA256 = '032963c3d47134d7976f8e17b0201efcff09fdcc7742d8a0db2135b38c8ce1f8'
         PortableExe = 'eza.exe'
         ScoopPackage = 'eza'
         ChocoPackage = 'eza'
@@ -539,7 +539,6 @@ function Import-ModulesInProfile {
 
 '@
 
-    # Replace placeholder with actual path
     $importBlock = $importBlock.Replace('SCRIPT_PATH_PLACEHOLDER', ($PSScriptRoot -replace '\\', '\\'))
 
     # Check if already imported
