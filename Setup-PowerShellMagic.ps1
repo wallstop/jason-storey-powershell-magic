@@ -72,7 +72,7 @@ function Write-Error {
 # NOTE: Update PortableSHA256 hashes before distribution by:
 # 1. Download the file manually
 # 2. Run: Get-FileHash -Path "downloaded-file" -Algorithm SHA256
-# 3. Replace PLACEHOLDER_HASH_UPDATE_BEFORE_USE with the actual hash
+# 3. Replace PortableSHA256 with the actual hash
 $Dependencies = @{
     'fzf' = @{
         Name = 'fzf'
