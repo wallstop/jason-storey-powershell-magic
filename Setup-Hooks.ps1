@@ -183,10 +183,10 @@ function Show-HookInfo {
     Write-Host ('=' * 60) -ForegroundColor Cyan
 
     Write-Info 'The pre-commit hooks will:'
-    Write-Host '  • Check PowerShell code formatting using PSScriptAnalyzer' -ForegroundColor Gray
-    Write-Host '  • Run unit tests to ensure code quality' -ForegroundColor Gray
-    Write-Host '  • Only run on commits that include PowerShell files' -ForegroundColor Gray
-    Write-Host '  • Skip hooks for merge commits' -ForegroundColor Gray
+    Write-Host '  Check PowerShell code formatting using PSScriptAnalyzer' -ForegroundColor Gray
+    Write-Host '  Run unit tests to ensure code quality' -ForegroundColor Gray
+    Write-Host '  Only run on commits that include PowerShell files' -ForegroundColor Gray
+    Write-Host '  Skip hooks for merge commits' -ForegroundColor Gray
 
     Write-Host "`nManual Commands:" -ForegroundColor Yellow
     Write-Host '  .\Run-Tests.ps1         - Run all tests and formatting checks' -ForegroundColor Gray

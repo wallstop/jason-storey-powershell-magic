@@ -185,9 +185,9 @@ function Show-CIInstructions {
     if ($CI) {
         Write-Host "`n=== CI Mode Information ===" -ForegroundColor Cyan
         Write-Info 'Running in CI mode:'
-        Write-Info '• Formatting checks only (no automatic fixes)'
-        Write-Info '• Strict exit codes for pipeline integration'
-        Write-Info '• All issues must be resolved for success'
+        Write-Info 'Formatting checks only (no automatic fixes)'
+        Write-Info 'Strict exit codes for pipeline integration'
+        Write-Info 'All issues must be resolved for success'
     }
 }
 
