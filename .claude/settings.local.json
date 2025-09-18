@@ -1,10 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(pwsh:*)",
-      "Bash(mkdir:*)",
-      "Bash(powershell:*)",
-      "Bash(.Run-Tests.ps1)"
+      "Bash(python:*)",
+      "Bash(xxd:*)",
+      "Bash(git checkout:*)",
+      "Bash(findstr:*)",
+      "Bash(del fix-unicode.ps1)"
     ],
     "deny": [],
     "ask": []

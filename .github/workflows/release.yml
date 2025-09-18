@@ -1,0 +1,278 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      release_notes:
+        description: 'Release notes (optional)'
+        required: false
+        type: string
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    - name: Setup PowerShell
+      shell: powershell
+      run: |
+        Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
+        Write-Host "OS Version: $($PSVersionTable.OS)"
+
+    - name: Run all tests before release
+      shell: powershell
+      run: |
+        Write-Host "Running comprehensive test suite before release..." -ForegroundColor Cyan
+        .\Run-Tests.ps1 -CI
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Test suite failed - cannot create release"
+          exit $LASTEXITCODE
+        }
+        Write-Host "All tests passed!" -ForegroundColor Green
+
+    - name: Calculate new version
+      id: version
+      shell: powershell
+      run: |
+        # Read current version
+        $currentVersion = Get-Content .\version.txt -Raw | ForEach-Object { $_.Trim() }
+        Write-Host "Current version: $currentVersion"
+
+        # Parse version
+        if ($currentVersion -match '^(\d+)\.(\d+)\.(\d+)$') {
+          $major = [int]$matches[1]
+          $minor = [int]$matches[2]
+          $patch = [int]$matches[3]
+        } else {
+          Write-Error "Invalid version format in version.txt: $currentVersion"
+          exit 1
+        }
+
+        # Calculate new version based on bump type
+        switch ('${{ github.event.inputs.version_bump }}') {
+          'major' {
+            $major++
+            $minor = 0
+            $patch = 0
+          }
+          'minor' {
+            $minor++
+            $patch = 0
+          }
+          'patch' {
+            $patch++
+          }
+        }
+
+        $newVersion = "$major.$minor.$patch"
+        Write-Host "New version: $newVersion"
+
+        # Output for next steps
+        echo "NEW_VERSION=$newVersion" >> $env:GITHUB_OUTPUT
+        echo "CURRENT_VERSION=$currentVersion" >> $env:GITHUB_OUTPUT
+
+    - name: Update version file
+      shell: powershell
+      run: |
+        $newVersion = '${{ steps.version.outputs.NEW_VERSION }}'
+        $newVersion | Out-File -FilePath .\version.txt -Encoding utf8 -NoNewline
+        Write-Host "Updated version.txt to: $newVersion"
+
+    - name: Create release archive
+      shell: powershell
+      run: |
+        $version = '${{ steps.version.outputs.NEW_VERSION }}'
+        $archiveName = "powershell-magic-v$version.zip"
+
+        Write-Host "Creating release archive: $archiveName" -ForegroundColor Cyan
+
+        # Create temp directory for release content
+        $tempDir = ".\release-temp"
+        New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+
+        # Copy essential files
+        $filesToInclude = @(
+          "Setup-PowerShellMagic.ps1",
+          "Format-PowerShell.ps1",
+          "Run-Tests.ps1",
+          "PSScriptAnalyzerSettings.psd1",
+          "README.md",
+          "LICENSE",
+          "version.txt",
+          "Modules",
+          "Tests"
+        )
+
+        foreach ($item in $filesToInclude) {
+          if (Test-Path $item) {
+            if (Test-Path $item -PathType Container) {
+              # Copy directory
+              Copy-Item -Path $item -Destination $tempDir -Recurse -Force
+              Write-Host "Copied directory: $item"
+            } else {
+              # Copy file
+              Copy-Item -Path $item -Destination $tempDir -Force
+              Write-Host "Copied file: $item"
+            }
+          } else {
+            Write-Warning "Item not found: $item"
+          }
+        }
+
+        # Create ZIP archive
+        Compress-Archive -Path "$tempDir\*" -DestinationPath $archiveName -Force
+        Write-Host "Created archive: $archiveName"
+
+        # Cleanup
+        Remove-Item $tempDir -Recurse -Force
+
+        # Verify archive
+        if (Test-Path $archiveName) {
+          $archiveSize = [math]::Round((Get-Item $archiveName).Length / 1MB, 2)
+          Write-Host "Archive size: $archiveSize MB" -ForegroundColor Green
+          echo "ARCHIVE_NAME=$archiveName" >> $env:GITHUB_OUTPUT
+          echo "ARCHIVE_SIZE=$archiveSize MB" >> $env:GITHUB_OUTPUT
+        } else {
+          Write-Error "Failed to create archive"
+          exit 1
+        }
+
+    - name: Generate changelog
+      id: changelog
+      shell: powershell
+      run: |
+        $currentVersion = '${{ steps.version.outputs.CURRENT_VERSION }}'
+        $newVersion = '${{ steps.version.outputs.NEW_VERSION }}'
+
+        Write-Host "Generating changelog from $currentVersion to $newVersion"
+
+        # Get commits since last tag/version
+        try {
+          $lastTag = git describe --tags --abbrev=0 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            $lastTag = $null
+          }
+        } catch {
+          $lastTag = $null
+        }
+
+        if ($lastTag) {
+          Write-Host "Getting commits since tag: $lastTag"
+          $commits = git log "$lastTag..HEAD" --oneline --no-merges
+        } else {
+          Write-Host "No previous tags found, getting recent commits"
+          $commits = git log --oneline --no-merges -n 10
+        }
+
+        # Build changelog
+        $changelog = @()
+        $changelog += "## What's Changed in v$newVersion"
+        $changelog += ""
+
+        if ('${{ github.event.inputs.release_notes }}') {
+          $changelog += '${{ github.event.inputs.release_notes }}'
+          $changelog += ""
+        }
+
+        if ($commits) {
+          $changelog += "### Commits"
+          foreach ($commit in $commits) {
+            if ($commit.Trim()) {
+              $changelog += "- $commit"
+            }
+          }
+        } else {
+          $changelog += "- Initial release"
+        }
+
+        $changelog += ""
+        $changelog += "### Installation"
+        $changelog += "Download and extract the archive, then run:"
+        $changelog += '```powershell'
+        $changelog += '.\Setup-PowerShellMagic.ps1'
+        $changelog += '```'
+
+        $changelogText = $changelog -join "`n"
+
+        # Save to file for upload
+        $changelogText | Out-File -FilePath "CHANGELOG.md" -Encoding utf8
+
+        # Output for GitHub (escape newlines)
+        $escapedChangelog = $changelogText -replace "`r?`n", "%0A" -replace "`r", "%0A"
+        echo "CHANGELOG=$escapedChangelog" >> $env:GITHUB_OUTPUT
+
+    - name: Commit version bump
+      shell: powershell
+      run: |
+        $newVersion = '${{ steps.version.outputs.NEW_VERSION }}'
+
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+
+        git add version.txt
+        git commit -m "Bump version to v$newVersion 🚀
+
+        Generated with [GitHub Actions](https://github.com/${{ github.repository }}/actions)
+
+        Co-Authored-By: GitHub Actions <action@github.com>"
+
+        Write-Host "Committed version bump to v$newVersion"
+
+    - name: Create and push tag
+      shell: powershell
+      run: |
+        $newVersion = '${{ steps.version.outputs.NEW_VERSION }}'
+        $tagName = "v$newVersion"
+
+        git tag -a $tagName -m "Release v$newVersion"
+        git push origin main
+        git push origin $tagName
+
+        Write-Host "Created and pushed tag: $tagName"
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v${{ steps.version.outputs.NEW_VERSION }}
+        name: PowerShell Magic v${{ steps.version.outputs.NEW_VERSION }}
+        body: ${{ steps.changelog.outputs.CHANGELOG }}
+        files: |
+          powershell-magic-v${{ steps.version.outputs.NEW_VERSION }}.zip
+          CHANGELOG.md
+        draft: false
+        prerelease: false
+        generate_release_notes: false
+
+    - name: Release Summary
+      shell: powershell
+      run: |
+        $version = '${{ steps.version.outputs.NEW_VERSION }}'
+        $archiveName = '${{ steps.create-release.outputs.ARCHIVE_NAME }}'
+        $archiveSize = '${{ steps.create-release.outputs.ARCHIVE_SIZE }}'
+
+        Write-Host ""
+        Write-Host "🎉 Release Created Successfully!" -ForegroundColor Green
+        Write-Host "================================" -ForegroundColor Green
+        Write-Host "Version: v$version" -ForegroundColor Cyan
+        Write-Host "Archive: $archiveName ($archiveSize)" -ForegroundColor Cyan
+        Write-Host "Repository: ${{ github.repository }}" -ForegroundColor Cyan
+        Write-Host "Release URL: https://github.com/${{ github.repository }}/releases/tag/v$version" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "The release is now available for download!" -ForegroundColor Yellow

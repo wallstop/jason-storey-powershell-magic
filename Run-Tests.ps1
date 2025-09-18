@@ -14,8 +14,11 @@ Run formatting checks and fixes
 .PARAMETER Test
 Run unit tests
 
+.PARAMETER Downloads
+Run portable downloads tests only
+
 .PARAMETER All
-Run both formatting and tests (default)
+Run formatting, unit tests, and downloads tests (default)
 
 .PARAMETER Fix
 Automatically fix formatting issues
@@ -34,19 +37,28 @@ Run formatting and automatically fix issues
 .EXAMPLE
 .\Run-Tests.ps1 -CI
 Run in CI mode (for automated builds)
+
+.EXAMPLE
+.\Run-Tests.ps1 -Downloads
+Run only portable downloads tests
+
+.EXAMPLE
+.\Run-Tests.ps1 -Test
+Run only unit tests (excluding downloads)
 #>
 
 [CmdletBinding()]
 param(
     [switch]$Format,
     [switch]$Test,
+    [switch]$Downloads,
     [switch]$All,
     [switch]$Fix,
     [switch]$CI
 )
 
 # Default to All if no specific option is chosen
-if (-not $Format -and -not $Test) {
+if (-not $Format -and -not $Test -and -not $Downloads) {
     $All = $true
 }
 
@@ -116,6 +128,8 @@ function Invoke-UnitTests {
 
     try {
         Write-Info 'Running unit tests...'
+        # Set environment variable for non-interactive mode
+        $env:POWERSHELL_MAGIC_NON_INTERACTIVE = '1'
         & $testScript
 
         $exitCode = $LASTEXITCODE
@@ -128,6 +142,41 @@ function Invoke-UnitTests {
         return $exitCode
     } catch {
         Write-Error "Test execution failed: $($_.Exception.Message)"
+        return 1
+    }
+}
+
+function Invoke-PortableDownloadTests {
+    Write-Host "`n=== Portable Downloads Tests ===" -ForegroundColor Yellow
+
+    $testScript = Join-Path $PSScriptRoot 'Tests\Test-PortableDownloads.ps1'
+
+    if (-not (Test-Path $testScript)) {
+        Write-Error "Portable downloads test script not found: $testScript"
+        return 1
+    }
+
+    try {
+        Write-Info 'Running portable downloads tests...'
+        # Set environment variable for non-interactive mode
+        $env:POWERSHELL_MAGIC_NON_INTERACTIVE = '1'
+        # Skip actual downloads in CI mode to avoid network dependencies
+        if ($CI) {
+            & $testScript -SkipDownloads
+        } else {
+            & $testScript
+        }
+
+        $exitCode = $LASTEXITCODE
+        if ($exitCode -eq 0) {
+            Write-Success 'All portable downloads tests passed'
+        } else {
+            Write-Error 'Some portable downloads tests failed'
+        }
+
+        return $exitCode
+    } catch {
+        Write-Error "Portable downloads test execution failed: $($_.Exception.Message)"
         return 1
     }
 }
@@ -171,6 +220,15 @@ function Main {
         if ($testResult -ne 0) {
             $overallSuccess = $false
             $exitCode = $testResult
+        }
+    }
+
+    # Run portable downloads tests
+    if ($Downloads -or $All) {
+        $downloadTestResult = Invoke-PortableDownloadTests
+        if ($downloadTestResult -ne 0) {
+            $overallSuccess = $false
+            $exitCode = $downloadTestResult
         }
     }
 

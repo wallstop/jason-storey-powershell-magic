@@ -35,12 +35,12 @@ param(
 )
 
 # Color output functions
-function Write-Success { param($Message) Write-Host "âœ… $Message" -ForegroundColor Green }
+function Write-Success { param($Message) Write-Host "✅ $Message" -ForegroundColor Green }
 function Write-Info {
-    param($Message) Write-Host 'â'¹ $Message" -ForegroundColor Cyan
+    param($Message) Write-Host "ℹ️ $Message" -ForegroundColor Cyan
 }
-function Write-Warning { param($Message) Write-Host "âš ï¸ $Message" -ForegroundColor Yellow }
-function Write-Error { param($Message) Write-Host "âŒ $Message" -ForegroundColor Red }
+function Write-Warning { param($Message) Write-Host "⚠️ $Message" -ForegroundColor Yellow }
+function Write-Error { param($Message) Write-Host "❌ $Message" -ForegroundColor Red }
 
 function Test-PreCommitFramework {
     try {
@@ -183,10 +183,10 @@ function Show-HookInfo {
     Write-Host ('=' * 60) -ForegroundColor Cyan
 
     Write-Info 'The pre-commit hooks will:'
-    Write-Host '  â€¢ Check PowerShell code formatting using PSScriptAnalyzer' -ForegroundColor Gray
-    Write-Host '  â€¢ Run unit tests to ensure code quality' -ForegroundColor Gray
-    Write-Host '  â€¢ Only run on commits that include PowerShell files' -ForegroundColor Gray
-    Write-Host '  â€¢ Skip hooks for merge commits' -ForegroundColor Gray
+    Write-Host '  • Check PowerShell code formatting using PSScriptAnalyzer' -ForegroundColor Gray
+    Write-Host '  • Run unit tests to ensure code quality' -ForegroundColor Gray
+    Write-Host '  • Only run on commits that include PowerShell files' -ForegroundColor Gray
+    Write-Host '  • Skip hooks for merge commits' -ForegroundColor Gray
 
     Write-Host "`nManual Commands:" -ForegroundColor Yellow
     Write-Host '  .\Run-Tests.ps1         - Run all tests and formatting checks' -ForegroundColor Gray

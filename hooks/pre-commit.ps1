@@ -15,12 +15,12 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # Color output functions
-function Write-Success { param($Message) Write-Host "âœ… $Message" -ForegroundColor Green }
+function Write-Success { param($Message) Write-Host "✅ $Message" -ForegroundColor Green }
 function Write-Info {
-    param($Message) Write-Host -Object "ℹ $Message" -ForegroundColor Cyan
+    param($Message) Write-Host -Object "ℹ️ $Message" -ForegroundColor Cyan
 }
-function Write-Warning { param($Message) Write-Host "âš ï¸ $Message" -ForegroundColor Yellow }
-function Write-Error { param($Message) Write-Host "âŒ $Message" -ForegroundColor Red }
+function Write-Warning { param($Message) Write-Host "⚠️ $Message" -ForegroundColor Yellow }
+function Write-Error { param($Message) Write-Host "❌ $Message" -ForegroundColor Red }
 function Test-PowerShellVersion {
     if ($PSVersionTable.PSVersion.Major -lt 5) {
         Write-Error 'PowerShell 5.0 or higher is required for pre-commit hooks'
@@ -108,7 +108,7 @@ function Invoke-PreCommitChecks {
                 & $formatterScript -Check
                 if ($LASTEXITCODE -ne 0) {
                     Write-Error 'Formatting issues found!'
-                    Write-Info "ðŸ’¡ Run './Format-PowerShell.ps1 -Fix' to automatically fix formatting issues"
+                    Write-Info "💡 Run './Format-PowerShell.ps1 -Fix' to automatically fix formatting issues"
                     return 1
                 }
                 Write-Success 'Formatting check passed'
@@ -130,26 +130,26 @@ function Invoke-PreCommitChecks {
                 & $testScript -Test
                 if ($LASTEXITCODE -ne 0) {
                     Write-Error 'Tests failed!'
-                    Write-Info 'ðŸ'¡ Fix the failing tests before committing'
-    return 1
-}
-Write-Success 'Tests passed'
-} catch {
-    Write-Error "Test execution failed: $($_.Exception.Message)"
-    return 1
-}
-}
+                    Write-Info '💡 Fix the failing tests before committing'
+                    return 1
+                }
+                Write-Success 'Tests passed'
+            } catch {
+                Write-Error "Test execution failed: $($_.Exception.Message)"
+                return 1
+            }
+        }
 
-Write-Success 'All pre-commit checks passed!'
-Write-Success 'ðŸš€ Ready to commit'
-return 0
+        Write-Success 'All pre-commit checks passed!'
+        Write-Success '🚀 Ready to commit'
+        return 0
 
-} catch {
-    Write-Error "Pre-commit hook failed: $($_.Exception.Message)"
-    return 1
-} finally {
-    Pop-Location
-}
+    } catch {
+        Write-Error "Pre-commit hook failed: $($_.Exception.Message)"
+        return 1
+    } finally {
+        Pop-Location
+    }
 }
 
 # Main execution

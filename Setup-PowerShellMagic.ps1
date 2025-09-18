@@ -29,6 +29,9 @@ Force reinstall of dependencies and overwrite profile changes.
 .PARAMETER InstallLocation
 Where to install portable tools. Default: $env:LOCALAPPDATA\PowerShellMagic
 
+.PARAMETER NonInteractive
+Run in non-interactive mode, automatically answering 'n' to all prompts
+
 .EXAMPLE
 .\Setup-PowerShellMagic.ps1
 Full automated setup with prompts
@@ -40,6 +43,10 @@ Force reinstall everything
 .EXAMPLE
 .\Setup-PowerShellMagic.ps1 -SkipDependencyCheck
 Only import modules, skip dependency installation
+
+.EXAMPLE
+.\Setup-PowerShellMagic.ps1 -NonInteractive
+Run setup without any user prompts (for testing)
 #>
 
 [CmdletBinding()]
@@ -47,7 +54,8 @@ param(
     [switch]$SkipDependencyCheck,
     [switch]$SkipProfileImport,
     [switch]$Force,
-    [string]$InstallLocation = (Join-Path $env:LOCALAPPDATA 'PowerShellMagic')
+    [string]$InstallLocation = (Join-Path $env:LOCALAPPDATA 'PowerShellMagic'),
+    [switch]$NonInteractive
 )
 
 # Color output functions
@@ -66,6 +74,21 @@ function Write-Warning {
 function Write-Error {
     param($Message)
     Write-Host "[ERROR] $Message" -ForegroundColor Red
+}
+
+# Prompt helper function for non-interactive mode
+function Get-UserResponse {
+    param(
+        [string]$Prompt,
+        [string]$DefaultResponse = 'n'
+    )
+
+    if ($NonInteractive) {
+        Write-Info "Non-interactive mode: Auto-answering '$DefaultResponse' for: $Prompt"
+        return $DefaultResponse
+    } else {
+        return Read-Host $Prompt
+    }
 }
 
 # Dependency definitions with cryptographic verification
@@ -153,9 +176,9 @@ function Test-FileHash {
     }
 
     if ($ExpectedHash -like 'NOTE:*') {
-        Write-Warning 'âš ï¸  No checksum available for verification'
+        Write-Warning 'No checksum available for verification'
         Write-Warning "$ExpectedHash"
-        $continue = Read-Host 'Continue without verification? (y/N)'
+        $continue = Get-UserResponse 'Continue without verification? (y/N)' 'N'
         return ($continue -match '^[Yy]')
     }
 
@@ -164,11 +187,11 @@ function Test-FileHash {
         $hashMatch = $actualHash.Hash -eq $ExpectedHash.ToUpper()
 
         if ($hashMatch) {
-            Write-Success 'âœ“ Cryptographic verification passed'
+            Write-Success 'Cryptographic verification passed'
             Write-Info "Expected: $ExpectedHash"
             Write-Info "Actual:   $($actualHash.Hash)"
         } else {
-            Write-Error 'âœ— CRYPTOGRAPHIC VERIFICATION FAILED!'
+            Write-Error 'CRYPTOGRAPHIC VERIFICATION FAILED!'
             Write-Error "Expected: $ExpectedHash"
             Write-Error "Actual:   $($actualHash.Hash)"
             Write-Error 'This could indicate file corruption or tampering.'
@@ -244,10 +267,10 @@ function Install-DependencyPortable {
     param($Dependency)
 
     Write-Warning "SECURITY NOTICE: This will download and execute software from: $($Dependency.PortableUrl)"
-    Write-Warning 'âš ï¸  Files are downloaded without cryptographic verification'
-    Write-Warning 'âš ï¸  This will modify your user PATH environment variable'
+    Write-Warning 'Files are downloaded without cryptographic verification'
+    Write-Warning 'This will modify your user PATH environment variable'
 
-    $confirm = Read-Host "Do you want to proceed with downloading $($Dependency.Name)? Type 'YES' to confirm"
+    $confirm = Get-UserResponse "Do you want to proceed with downloading $($Dependency.Name)? Type 'YES' to confirm" 'NO'
     if ($confirm -ne 'YES') {
         Write-Warning 'Installation cancelled by user'
         return $false
@@ -304,11 +327,11 @@ function Install-DependencyPortable {
         # Add to PATH if not already there
         $currentPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
         if ($currentPath -notlike "*$installDir*") {
-            Write-Warning 'âš ï¸  About to modify your user PATH environment variable'
+            Write-Warning 'About to modify your user PATH environment variable'
             Write-Info "Current PATH: $currentPath"
             Write-Info "Will add: $installDir"
 
-            $pathConfirm = Read-Host 'Add to PATH? (Y/n)'
+            $pathConfirm = Get-UserResponse 'Add to PATH? (Y/n)' 'n'
             if ($pathConfirm -notmatch '^[Nn]') {
                 Write-Info "Adding $installDir to user PATH..."
                 [Environment]::SetEnvironmentVariable('PATH', "$currentPath;$installDir", 'User')
@@ -414,7 +437,7 @@ function Install-Dependency {
             Write-Host '  s. Skip this dependency' -ForegroundColor Gray
 
             $maxChoice = $availableManagers.Count + 1
-            $choice = Read-Host "Choose installation method (1-$maxChoice, 's')"
+            $choice = Get-UserResponse "Choose installation method (1-$maxChoice, 's')" 's'
 
             if ($choice -eq 's') {
                 Write-Warning "Skipping $($Dependency.Name)"
@@ -465,11 +488,11 @@ function Get-ModulePaths {
 }
 
 function Import-ModulesInProfile {
-    Write-Warning 'âš ï¸  PROFILE MODIFICATION NOTICE:'
+    Write-Warning 'PROFILE MODIFICATION NOTICE:'
     Write-Warning "This will modify your PowerShell profile at: $PROFILE"
     Write-Warning 'A backup will be created before any changes'
 
-    $profileConfirm = Read-Host "Do you want to modify your PowerShell profile? Type 'YES' to confirm"
+    $profileConfirm = Get-UserResponse "Do you want to modify your PowerShell profile? Type 'YES' to confirm" 'NO'
     if ($profileConfirm -ne 'YES') {
         Write-Warning 'Profile modification cancelled by user'
         return $false
@@ -544,7 +567,7 @@ function Import-ModulesInProfile {
     # Check if already imported
     if ($profileContent -like '*PowerShell Magic Modules*') {
         if (-not $Force) {
-            $choice = Read-Host 'PowerShell Magic modules already in profile. Update? (Y/n)'
+            $choice = Get-UserResponse 'PowerShell Magic modules already in profile. Update? (Y/n)' 'n'
             if ($choice -match '^[Nn]') {
                 Write-Info 'Skipping profile update'
                 return $true
@@ -640,22 +663,6 @@ function Show-Summary {
 
 # Main execution
 function Main {
-    # Write-Host @'
-    # â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
-    #         â•‘                    PowerShell Magic Setup                   â•‘
-    #         â•‘                                                              â•‘
-    #         ï¿½'  ?? QuickJump - Fast directory navigation                   ï¿½'
-    #         â•‘  ??ï¿½ Templater - Project template management                 â•‘
-    #         â•‘  ?? Unitea - Unity project management                       â•‘
-    #         â•‘                                                              â•‘
-    #         â•‘  SAFETY NOTICE: This setup will prompt before:              â•‘
-    #         ï¿½'  - Downloading any external files                           ï¿½'
-    #         ï¿½'  - Modifying your PATH environment variable                 ï¿½'
-    #         ï¿½'  - Modifying your PowerShell profile                        ï¿½'
-    #         ï¿½'  - All changes can be undone                                ï¿½'
-    #         â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-    # PowerShell Magic Setup complete
-    # '@
     Write-Host 'PowerShell Magic Setup' -ForegroundColor Cyan
 
     Write-Host "`nSECURITY INFORMATION:" -ForegroundColor Yellow
@@ -664,7 +671,7 @@ function Main {
     Write-Host '- Profile modifications create automatic backups' -ForegroundColor Gray
     Write-Host '- All changes are reversible' -ForegroundColor Gray
 
-    $consent = Read-Host "`nProceed with setup? (Y/n)"
+    $consent = Get-UserResponse "`nProceed with setup? (Y/n)" 'n'
     if ($consent -match '^[Nn]') {
         Write-Warning 'Setup cancelled by user'
         return
@@ -677,7 +684,7 @@ function Main {
 
     # Dependency checking and installation
     if (-not $SkipDependencyCheck) {
-        Write-Host "`n??ï¿½ Scanning dependencies..." -ForegroundColor Yellow
+        Write-Host "`nScanning dependencies..." -ForegroundColor Yellow
 
         foreach ($depKey in $Dependencies.Keys) {
             $dependency = $Dependencies[$depKey]
@@ -696,7 +703,7 @@ function Main {
                     }
 
                     if (-not $Force) {
-                        $install = Read-Host "Install $($dependency.Name)? (Y/n)"
+                        $install = Get-UserResponse "Install $($dependency.Name)? (Y/n)" 'n'
                         if ($install -match '^[Nn]') {
                             Write-Warning "Skipping $($dependency.Name)"
                             $results.Dependencies[$depKey] = $false
@@ -712,7 +719,7 @@ function Main {
                         Write-Host "  Note: $($dependency.Note)" -ForegroundColor Gray
                     }
 
-                    $install = Read-Host "Install optional $($dependency.Name)? (y/N)"
+                    $install = Get-UserResponse "Install optional $($dependency.Name)? (y/N)" 'N'
                     if ($install -match '^[Yy]') {
                         $results.Dependencies[$depKey] = Install-Dependency $dependency
                     } else {
@@ -730,10 +737,10 @@ function Main {
 
     # Profile import
     if (-not $SkipProfileImport) {
-        Write-Host "`n??ï¿½ Configuring PowerShell profile..." -ForegroundColor Yellow
+        Write-Host "`nConfiguring PowerShell profile..." -ForegroundColor Yellow
 
         if (-not $Force) {
-            $importChoice = Read-Host 'Import modules into your PowerShell profile? (Y/n)'
+            $importChoice = Get-UserResponse 'Import modules into your PowerShell profile? (Y/n)' 'n'
             if ($importChoice -match '^[Nn]') {
                 Write-Info 'Skipping profile import'
             } else {

@@ -34,6 +34,10 @@ param(
     [string]$TestName = 'All'
 )
 
+# Set non-interactive mode to prevent blocking on prompts
+$ErrorActionPreference = 'Continue'
+$ConfirmPreference = 'None'
+
 # Test framework variables
 $Script:TestResults = @{
     Passed = 0
@@ -152,7 +156,7 @@ function Test-Setup {
 
     # Test 4: Dependencies configuration is valid
     try {
-        . $setupPath
+        . $setupPath -NonInteractive
         Assert-NotNull -Value $Dependencies -Message 'Dependencies variable is defined'
         Assert-True -Condition ($Dependencies.Count -gt 0) -Message 'Dependencies contains entries'
 
