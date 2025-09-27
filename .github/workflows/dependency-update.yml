@@ -14,12 +14,12 @@ jobs:
   update-dependencies:
     name: Update Dependencies
     runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v5
-      with:
-        token: ${{ secrets.GH_TOKEN }}
 
     - name: Setup PowerShell
       shell: powershell
