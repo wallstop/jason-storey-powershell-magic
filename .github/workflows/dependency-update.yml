@@ -55,6 +55,25 @@ jobs:
 
         git config --global user.name "Dependency Update Bot"
         git config --global user.email "action@github.com"
+
+        # Fetch latest changes to ensure we have all remote refs
+        git fetch origin
+
+        # Check if remote branch exists and delete it if so
+        $remoteBranchExists = git ls-remote --heads origin $branchName
+        if ($remoteBranchExists) {
+          Write-Host "Remote branch $branchName exists, deleting it..." -ForegroundColor Yellow
+          git push origin --delete $branchName
+        }
+
+        # Check if local branch exists and delete it if so
+        $localBranchExists = git branch --list $branchName
+        if ($localBranchExists) {
+          Write-Host "Local branch $branchName exists, deleting it..." -ForegroundColor Yellow
+          git branch -D $branchName
+        }
+
+        # Create fresh branch
         git checkout -b $branchName
 
         echo "BRANCH_NAME=$branchName" >> $env:GITHUB_ENV
