@@ -15,7 +15,7 @@ jobs:
     name: Update Dependencies
     runs-on: windows-latest
     env:
-      GH_TOKEN: ${{ github.token }}
+      GH_TOKEN: ${{ secrets.GH_TOKEN}}
 
     steps:
     - name: Checkout repository
