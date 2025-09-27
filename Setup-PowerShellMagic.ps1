@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 
 <#
 .SYNOPSIS
@@ -101,8 +101,8 @@ $Dependencies = @{
         Name = 'fzf'
         Description = 'Fuzzy finder for interactive selection'
         TestCommand = 'fzf --version'
-        PortableUrl = 'https://github.com/junegunn/fzf/releases/download/v0.54.3/fzf-0.54.3-windows_amd64.zip'
-        PortableSHA256 = '604D11B1C36D03675DE80D598DFE8A3EBA4F8607E0D8BBCC63734EFFDE209BB6'
+        PortableUrl = 'https://github.com/junegunn/fzf/releases/download/v0.65.2/fzf-0.65.2-windows_amd64.zip'
+        PortableSHA256 = 'AD77A1E4B6EA6B790B02BFAD333EB3E2A802E5E5423271733B324794EDA31B9E'
         PortableExe = 'fzf.exe'
         ScoopPackage = 'fzf'
         ChocoPackage = 'fzf'
@@ -120,8 +120,8 @@ $Dependencies = @{
         Name = '7-Zip'
         Description = 'Archive extraction tool'
         TestCommand = '7z'
-        PortableUrl = 'https://www.7-zip.org/a/7z2407-x64.exe'
-        PortableSHA256 = 'AD12CEC3A3957FF73A689E0D65A05B6328C80FD76336A1B1A6285335F8DAB1BA'
+        PortableUrl = 'https://www.7-zip.org/a/7z2501-x64.exe'
+        PortableSHA256 = '78AFA2A1C773CAF3CF7EDF62F857D2A8A5DA55FB0FFF5DA416074C0D28B2B55F'
         ScoopPackage = '7zip'
         ChocoPackage = '7zip'
         WingetPackage = '7zip.7zip'
@@ -759,3 +759,4 @@ function Main {
 
 # Run main function
 Main
+
