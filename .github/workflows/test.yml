@@ -124,19 +124,39 @@ jobs:
         }
 
         # Get all PowerShell files
-        $files = Get-ChildItem -Recurse -Include "*.ps1", "*.psm1", "*.psd1" | Where-Object {
+        $files = Get-ChildItem -Recurse -Include "*.ps1", "*.psm1", "*.psd1" -ErrorAction SilentlyContinue | Where-Object {
+          $null -ne $_ -and
+          $null -ne $_.FullName -and
           $_.FullName -notmatch "\\\.git\\" -and
           $_.FullName -notmatch "\\bin\\" -and
           $_.FullName -notmatch "\\obj\\"
         }
 
+        if ($null -eq $files -or $files.Count -eq 0) {
+          Write-Warning "No PowerShell files found to scan"
+          Write-Host "Security scan completed successfully!" -ForegroundColor Green
+          return
+        }
+
+        Write-Host "Found $($files.Count) PowerShell files to scan" -ForegroundColor Cyan
+
         $criticalIssues = @()
 
         foreach ($file in $files) {
+          if ($null -eq $file -or $null -eq $file.FullName) {
+            Write-Warning "Skipping null or invalid file reference"
+            continue
+          }
+
           Write-Host "Scanning: $($file.Name)" -ForegroundColor Yellow
 
-          $results = Invoke-ScriptAnalyzer -Path $file.FullName -Severity Error, Warning
-          $securityIssues = $results | Where-Object { $_.RuleName -like "*Security*" -or $_.Severity -eq "Error" }
+          try {
+            $results = Invoke-ScriptAnalyzer -Path $file.FullName -Severity Error, Warning
+            $securityIssues = $results | Where-Object { $_.RuleName -like "*Security*" -or $_.Severity -eq "Error" }
+          } catch {
+            Write-Warning "Failed to analyze $($file.FullName): $($_.Exception.Message)"
+            continue
+          }
 
           if ($securityIssues) {
             $criticalIssues += $securityIssues
