@@ -261,8 +261,8 @@ function Test-DependencyUpdates {
                         NewHash = $newHash
                     }
 
-                    $summary += "- $($updater.Name): $($currentDep.Version) → $latestVersion"
-                    Write-Success "$($updater.Name) update available: $($currentDep.Version) → $latestVersion"
+                    $summary += "- $($updater.Name): $($currentDep.Version) -> $latestVersion"
+                    Write-Success "$($updater.Name) update available: $($currentDep.Version) -> $latestVersion"
                 } else {
                     Write-Error "Failed to verify new version of $($updater.Name)"
                 }
@@ -323,7 +323,7 @@ function Update-SetupScript {
         # Update SHA256 hash
         $content = $content.Replace($update.CurrentHash, $update.NewHash)
 
-        Write-Success "Updated $($update.Name): $($update.CurrentVersion) → $($update.LatestVersion)"
+        Write-Success "Updated $($update.Name): $($update.CurrentVersion) -> $($update.LatestVersion)"
     }
 
     # Write updated content
@@ -368,7 +368,7 @@ function Main {
             Write-Host "`nUpdates available:" -ForegroundColor Yellow
             foreach ($depKey in $updates.Keys) {
                 $update = $updates[$depKey]
-                Write-Host "  $($update.Name): $($update.CurrentVersion) → $($update.LatestVersion)" -ForegroundColor Green
+                Write-Host "  $($update.Name): $($update.CurrentVersion) -> $($update.LatestVersion)" -ForegroundColor Green
                 Write-Host "    URL: $($update.NewUrl)" -ForegroundColor Gray
                 Write-Host "    SHA256: $($update.NewHash)" -ForegroundColor Gray
             }
