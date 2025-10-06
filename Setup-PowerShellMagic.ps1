@@ -139,7 +139,7 @@ $Dependencies = @{
         Name = 'eza'
         Description = 'Modern ls replacement with better directory previews'
         TestCommand = 'eza --version'
-        PortableUrl = 'https://github.com/eza-community/eza/releases/download/v0.23.3/eza.exe_x86_64-pc-windows-gnu.zip'
+        PortableUrl = 'https://github.com/eza-community/eza/releases/download/v0.23.4/eza.exe_x86_64-pc-windows-gnu.zip'
         PortableSHA256 = '032963c3d47134d7976f8e17b0201efcff09fdcc7742d8a0db2135b38c8ce1f8'
         PortableExe = 'eza.exe'
         ScoopPackage = 'eza'
@@ -759,4 +759,5 @@ function Main {
 
 # Run main function
 Main
+
 
