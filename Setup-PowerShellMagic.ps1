@@ -101,8 +101,8 @@ $Dependencies = @{
         Name = 'fzf'
         Description = 'Fuzzy finder for interactive selection'
         TestCommand = 'fzf --version'
-        PortableUrl = 'https://github.com/junegunn/fzf/releases/download/v0.65.2/fzf-0.65.2-windows_amd64.zip'
-        PortableSHA256 = 'AD77A1E4B6EA6B790B02BFAD333EB3E2A802E5E5423271733B324794EDA31B9E'
+        PortableUrl = 'https://github.com/junegunn/fzf/releases/download/v0.66.0/fzf-0.66.0-windows_amd64.zip'
+        PortableSHA256 = '9D2A1BC6E38665D0A15D846703A2C9EF1F5FE2630A9F972F9832712709C18823'
         PortableExe = 'fzf.exe'
         ScoopPackage = 'fzf'
         ChocoPackage = 'fzf'
@@ -759,5 +759,6 @@ function Main {
 
 # Run main function
 Main
+
 
 
