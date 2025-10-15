@@ -74,7 +74,7 @@ dependencies).
 
 The setup script:
 
-1. Checks for dependencies (fzf, 7-Zip, eza)
+1. Checks for dependencies (fzf, 7-Zip/7zz, eza)
 2. **Asks permission** to install missing tools
 3. **Creates backup** of your PowerShell profile
 4. **Asks permission** to modify your profile
@@ -328,7 +328,7 @@ It never modifies project files.
 **Optional (highly recommended):**
 
 - **fzf**: Interactive fuzzy finding (for QuickJump and Templater)
-- **7-Zip**: Non-ZIP archive support (for Templater)
+- **7-Zip / 7zz**: Non-ZIP archive support (for Templater)
 - **eza**: Enhanced directory previews (nice to have)
 
 ### How do I install fzf?
@@ -348,19 +348,16 @@ Restart PowerShell after installing.
 
 ### How do I install 7-Zip?
 
-```powershell
-# Scoop
-scoop install 7zip
+- **Windows:** `scoop install 7zip`, `choco install 7zip`, or
+  `winget install 7zip.7zip`
+- **macOS:** `brew install p7zip` *(installs the `7zz` CLI)*
+- **Linux:** `sudo apt install p7zip-full`, `sudo dnf install p7zip`, or
+  `sudo pacman -S p7zip`
+- **Manual:** download binaries from <https://www.7-zip.org/> (ships `7z.exe`
+  for Windows and `7zz` for macOS/Linux)
 
-# Chocolatey
-choco install 7zip
-
-# Winget
-winget install 7zip.7zip
-
-# Manual
-# https://www.7-zip.org/
-```
+> Verify manual downloads with `Get-FileHash` or `shasum -a 256`, comparing the
+> result to the SHA256 values in the README manual portable downloads table.
 
 ### Can I use without a package manager?
 

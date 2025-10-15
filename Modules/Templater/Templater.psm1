@@ -6,8 +6,23 @@ $script:TemplaterConfigTimestamp = $null
 $script:ZipAssemblyLoaded = $false
 $script:Trusted7ZipPath = $null
 $script:IsWindows = ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT)
+$script:IsMacOS = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::OSX)
+$script:IsLinux = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Linux)
+$script:CurrentPlatform = if ($script:IsWindows) {
+    'Windows'
+} elseif ($script:IsMacOS) {
+    'MacOS'
+} elseif ($script:IsLinux) {
+    'Linux'
+} else {
+    'Unknown'
+}
 $script:SevenZipWarningEmitted = $false
-$script:Managed7ZipHash = '78AFA2A1C773CAF3CF7EDF62F857D2A8A5DA55FB0FFF5DA416074C0D28B2B55F'
+$script:ManagedSevenZipHashes = @{
+    Windows = '78AFA2A1C773CAF3CF7EDF62F857D2A8A5DA55FB0FFF5DA416074C0D28B2B55F'
+    MacOS = '26AA75BC262BB10BF0805617B95569C3035C2C590A99F7DB55C7E9607B2685E0'
+    Linux = '4CA3B7C6F2F67866B92622818B58233DC70367BE2F36B498EB0BDEAAA44B53F4'
+}
 $script:SevenZipHashCache = @{}
 
 # Private helper functions
@@ -160,8 +175,9 @@ function Test-IsTrusted7ZipPath {
 
     $safeRoots = @()
 
-    if ($env:LOCALAPPDATA) {
-        $safeRoots += Join-Path (Join-Path $env:LOCALAPPDATA 'PowerShellMagic') 'bin'
+    $managedDir = Get-ManagedSevenZipDirectory
+    if ($managedDir) {
+        $safeRoots += $managedDir
     }
 
     if ($script:IsWindows) {
@@ -175,6 +191,7 @@ function Test-IsTrusted7ZipPath {
     } else {
         $safeRoots += '/usr/bin'
         $safeRoots += '/usr/local/bin'
+        $safeRoots += '/opt/homebrew/bin'
     }
 
     foreach ($root in $safeRoots | Where-Object { $_ }) {
@@ -192,16 +209,49 @@ function Test-IsTrusted7ZipPath {
     return $false
 }
 
+function Get-PowerShellMagicDataRoot {
+    if ($script:IsWindows) {
+        if ($env:LOCALAPPDATA) {
+            return Join-Path $env:LOCALAPPDATA 'PowerShellMagic'
+        }
+
+        return $null
+    }
+
+    if ($env:XDG_DATA_HOME) {
+        return Join-Path $env:XDG_DATA_HOME 'powershell-magic'
+    }
+
+    if ($env:HOME) {
+        return Join-Path (Join-Path $env:HOME '.local/share') 'powershell-magic'
+    }
+
+    return $null
+}
+
 function Get-ManagedSevenZipDirectory {
-    if (-not $script:IsWindows) {
+    $dataRoot = Get-PowerShellMagicDataRoot
+    if (-not $dataRoot) {
         return $null
     }
 
-    if (-not $env:LOCALAPPDATA) {
+    return Join-Path $dataRoot 'bin'
+}
+
+function Get-ManagedSevenZipHash {
+    param(
+        [string]$Platform = $script:CurrentPlatform
+    )
+
+    if (-not $Platform) {
         return $null
     }
 
-    return Join-Path (Join-Path $env:LOCALAPPDATA 'PowerShellMagic') 'bin'
+    if ($script:ManagedSevenZipHashes.ContainsKey($Platform)) {
+        return $script:ManagedSevenZipHashes[$Platform]
+    }
+
+    return $null
 }
 
 function Test-IsManagedSevenZipPath {
@@ -242,7 +292,7 @@ function Test-7ZipHashValid {
     $expectedHash = if ($env:POWERSHELLMAGIC_7ZIP_HASH) {
         $env:POWERSHELLMAGIC_7ZIP_HASH
     } elseif (Test-IsManagedSevenZipPath -Path $ExecutablePath) {
-        $script:Managed7ZipHash
+        Get-ManagedSevenZipHash
     } else {
         $null
     }
@@ -280,10 +330,16 @@ function Get-Trusted7ZipExecutable {
         $candidates.Add($env:POWERSHELLMAGIC_7ZIP_PATH)
     }
 
-    if ($env:LOCALAPPDATA) {
-        $managedBin = Join-Path (Join-Path $env:LOCALAPPDATA 'PowerShellMagic') 'bin'
-        $candidates.Add((Join-Path $managedBin '7z.exe'))
-        $candidates.Add((Join-Path $managedBin '7z'))
+    $managedBin = Get-ManagedSevenZipDirectory
+    if ($managedBin) {
+        if ($script:IsWindows) {
+            $candidates.Add((Join-Path $managedBin '7z.exe'))
+            $candidates.Add((Join-Path $managedBin '7z'))
+        } else {
+            $candidates.Add((Join-Path $managedBin '7zz'))
+            $candidates.Add((Join-Path $managedBin '7z'))
+            $candidates.Add((Join-Path $managedBin '7zzs'))
+        }
     }
 
     if ($script:IsWindows) {
@@ -295,8 +351,12 @@ function Get-Trusted7ZipExecutable {
             $candidates.Add((Join-Path (Join-Path ${env:ProgramFiles(x86)} '7-Zip') '7z.exe'))
         }
     } else {
+        $candidates.Add('/usr/bin/7zz')
+        $candidates.Add('/usr/local/bin/7zz')
+        $candidates.Add('/opt/homebrew/bin/7zz')
         $candidates.Add('/usr/bin/7z')
         $candidates.Add('/usr/local/bin/7z')
+        $candidates.Add('/opt/homebrew/bin/7z')
     }
 
     foreach ($candidate in $candidates | Where-Object { $_ }) {
@@ -316,7 +376,7 @@ function Get-Trusted7ZipExecutable {
         }
     }
 
-    $commandNames = if ($script:IsWindows) { @('7z.exe', '7z') } else { @('7z', '7za') }
+    $commandNames = if ($script:IsWindows) { @('7z.exe', '7z') } else { @('7zz', '7z', '7za', '7zzs') }
 
     foreach ($name in $commandNames) {
         try {

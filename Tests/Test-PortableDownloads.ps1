@@ -241,6 +241,24 @@ function Test-DependencyConfiguration {
                     Write-TestInfo "  URL: $($asset.Url)"
                     Write-TestInfo "  SHA256: $($asset.Sha256)"
                 }
+
+                if ($dependency.Name -eq '7-Zip') {
+                    $expectedPlatforms = @('Windows', 'MacOS', 'Linux')
+                    foreach ($platform in $expectedPlatforms) {
+                        Assert-True -Condition ($dependency.PortableAssets.ContainsKey($platform)) -Message "7-Zip defines portable asset for $platform"
+                        $platformAsset = $dependency.PortableAssets[$platform]
+                        Assert-NotNull -Value $platformAsset.Url -Message "7-Zip $platform asset has URL"
+                        Assert-NotNull -Value $platformAsset.Sha256 -Message "7-Zip $platform asset has SHA256"
+
+                        if ($platform -eq 'Windows') {
+                            Assert-Equal -Expected 'exe' -Actual $platformAsset.ArchiveType -Message '7-Zip Windows asset uses exe archive type'
+                            Assert-Equal -Expected '7z.exe' -Actual $platformAsset.Executable -Message '7-Zip Windows asset uses 7z.exe executable'
+                        } else {
+                            Assert-Equal -Expected 'tar.xz' -Actual $platformAsset.ArchiveType -Message "7-Zip $platform asset uses tar.xz archive type"
+                            Assert-Equal -Expected '7zz' -Actual $platformAsset.Executable -Message "7-Zip $platform asset uses 7zz executable"
+                        }
+                    }
+                }
             } else {
                 Write-TestSkipped "$($dependency.Name) - No portable asset defined for $script:CurrentPlatformKey"
             }
@@ -443,4 +461,6 @@ try {
     # Restore original location
     Set-Location $originalLocation
 }
+
+
 

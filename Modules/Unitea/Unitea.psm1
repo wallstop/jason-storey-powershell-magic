@@ -49,15 +49,22 @@ function Get-UnityHubDefaultPath {
     }
 
     if ($script:IsLinux) {
-        $home = $env:HOME
+        $userHome = $env:HOME
         $candidates = @(
             '/usr/bin/unityhub',
             '/usr/local/bin/unityhub',
             '/opt/unityhub/unityhub',
-            '/opt/UnityHub/unityhub',
-            (Join-PathSegments -Segments @($home, 'UnityHub', 'UnityHub.AppImage')),
-            (Join-PathSegments -Segments @($home, 'Applications', 'UnityHub.AppImage'))
-        ) | Where-Object { $_ }
+            '/opt/UnityHub/unityhub'
+        )
+
+        if ($userHome) {
+            $candidates += @(
+                (Join-PathSegments -Segments @($userHome, 'UnityHub', 'UnityHub.AppImage')),
+                (Join-PathSegments -Segments @($userHome, 'Applications', 'UnityHub.AppImage'))
+            )
+        }
+
+        $candidates = $candidates | Where-Object { $_ }
 
         foreach ($candidate in $candidates) {
             if (Test-Path $candidate) {

@@ -164,6 +164,38 @@ function Test-Setup {
             $dependency = $Dependencies[$dep]
             Assert-NotNull -Value $dependency.Name -Message "Dependency $dep has Name"
             Assert-NotNull -Value $dependency.Description -Message "Dependency $dep has Description"
+
+            if ($dep -eq '7zip') {
+                Assert-True -Condition ($dependency.TestCommand -is [System.Collections.IDictionary]) -Message '7-Zip TestCommand is platform-aware'
+                Assert-True -Condition ($dependency.TestCommand.ContainsKey('Windows')) -Message '7-Zip TestCommand has Windows entry'
+                Assert-True -Condition ($dependency.TestCommand.ContainsKey('MacOS')) -Message '7-Zip TestCommand has MacOS entry'
+                Assert-True -Condition ($dependency.TestCommand.ContainsKey('Linux')) -Message '7-Zip TestCommand has Linux entry'
+                Assert-Equal -Expected '7z' -Actual ($dependency.TestCommand.Windows[0]) -Message '7-Zip Windows test command uses 7z'
+                Assert-Equal -Expected '7zz' -Actual ($dependency.TestCommand.MacOS[0]) -Message '7-Zip MacOS test command uses 7zz'
+                Assert-Equal -Expected '7zz' -Actual ($dependency.TestCommand.Linux[0]) -Message '7-Zip Linux test command uses 7zz'
+            }
+        }
+
+        if ($Dependencies.ContainsKey('7zip')) {
+            $sevenZipDependency = $Dependencies['7zip']
+            $expectedPlatforms = @('Windows', 'MacOS', 'Linux')
+
+            foreach ($platform in $expectedPlatforms) {
+                Assert-True -Condition ($sevenZipDependency.PortableAssets.ContainsKey($platform)) -Message "7-Zip defines portable asset for $platform"
+                $asset = $sevenZipDependency.PortableAssets[$platform]
+                Assert-NotNull -Value $asset.Url -Message "7-Zip $platform asset has URL"
+                Assert-NotNull -Value $asset.Sha256 -Message "7-Zip $platform asset has SHA256"
+
+                if ($platform -eq 'Windows') {
+                    Assert-Equal -Expected 'exe' -Actual $asset.ArchiveType -Message '7-Zip Windows asset uses exe archive type'
+                    Assert-Equal -Expected '7z.exe' -Actual $asset.Executable -Message '7-Zip Windows asset uses 7z.exe executable'
+                } else {
+                    Assert-Equal -Expected 'tar.xz' -Actual $asset.ArchiveType -Message "7-Zip $platform asset uses tar.xz archive type"
+                    Assert-Equal -Expected '7zz' -Actual $asset.Executable -Message "7-Zip $platform asset uses 7zz executable"
+                }
+            }
+        } else {
+            Assert-True -Condition $false -Message 'Dependencies include 7-Zip entry'
         }
     } catch {
         Assert-True -Condition $false -Message "Dependencies configuration is valid: $($_.Exception.Message)"
@@ -525,19 +557,53 @@ function Test-Templater {
             $templaterCopyPath = Join-Path $updateTestRoot 'Modules\Templater\Templater.psm1'
 
             $setupCopyContent = Get-Content -Path $setupCopyPath -Raw
-            $currentAssetMatch = [regex]::Match(
+            $assetBlockMatch = [regex]::Match(
                 $setupCopyContent,
-                "'7zip'\s*=\s*@\{.*?PortableAssets\s*=\s*@\{.*?Windows\s*=\s*@\{.*?Url\s*=\s*'([^']+)'.*?Sha256\s*=\s*'([^']+)'",
+                "'7zip'\s*=\s*@\{.*?PortableAssets\s*=\s*@\{(?<assets>.*?)\}\s*\}",
                 [System.Text.RegularExpressions.RegexOptions]::Singleline
             )
 
-            if (-not $currentAssetMatch.Success) {
+            if (-not $assetBlockMatch.Success) {
                 Assert-True -Condition $false -Message 'Dependency updater test could not locate 7-Zip metadata in setup script copy'
             } else {
-                $currentPortableUrl = $currentAssetMatch.Groups[1].Value
-                $currentPortableHash = $currentAssetMatch.Groups[2].Value
-                $newPortableUrl = "$currentPortableUrl?updated=1"
-                $newPortableHash = '0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF'
+                $assetSection = $assetBlockMatch.Groups['assets'].Value
+                $platforms = @('Windows', 'MacOS', 'Linux')
+                $currentAssets = @{}
+
+                foreach ($platform in $platforms) {
+                    $platformMatch = [regex]::Match(
+                        $assetSection,
+                        "$platform\s*=\s*@\{.*?Url\s*=\s*'([^']+)'.*?Sha256\s*=\s*'([^']+)'",
+                        [System.Text.RegularExpressions.RegexOptions]::Singleline
+                    )
+
+                    Assert-True -Condition $platformMatch.Success -Message "Dependency updater test located 7-Zip $platform asset metadata"
+
+                    $currentAssets[$platform] = @{
+                        Url = $platformMatch.Groups[1].Value
+                        Hash = $platformMatch.Groups[2].Value
+                    }
+                }
+
+                $newHashes = @{
+                    Windows = '0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF'
+                    MacOS = 'FEDCBA9876543210FEDCBA9876543210FEDCBA9876543210FEDCBA9876543210'
+                    Linux = '1111222233334444111122223333444411112222333344441111222233334444'
+                }
+
+                $platformUpdates = @{}
+                foreach ($platform in $platforms) {
+                    $currentAsset = $currentAssets[$platform]
+                    $newUrl = "$($currentAsset.Url)?updated=$($platform.ToLower())"
+                    $newHash = $newHashes[$platform]
+
+                    $platformUpdates[$platform] = @{
+                        CurrentUrl = $currentAsset.Url
+                        NewUrl = $newUrl
+                        CurrentHash = $currentAsset.Hash
+                        NewHash = $newHash
+                    }
+                }
 
                 & {
                     param($scriptPath, $updates)
@@ -548,20 +614,20 @@ function Test-Templater {
                         Name = '7-Zip'
                         CurrentVersion = 'current'
                         LatestVersion = 'latest'
-                        CurrentUrl = $currentPortableUrl
-                        NewUrl = $newPortableUrl
-                        CurrentHash = $currentPortableHash
-                        NewHash = $newPortableHash
+                        PlatformUpdates = $platformUpdates
                     }
                 }
 
                 $postUpdateSetup = Get-Content -Path $setupCopyPath -Raw
                 $postUpdateTemplater = Get-Content -Path $templaterCopyPath -Raw
 
-                Assert-True -Condition ($postUpdateSetup -match [regex]::Escape($newPortableUrl)) -Message 'Dependency updater writes new 7-Zip URL to setup script copy'
-                Assert-True -Condition ($postUpdateSetup -match [regex]::Escape($newPortableHash)) -Message 'Dependency updater writes new 7-Zip hash to setup script copy'
-                Assert-True -Condition ($postUpdateSetup -notmatch [regex]::Escape($currentPortableHash)) -Message 'Dependency updater removes old 7-Zip hash from setup script copy'
-                Assert-True -Condition ($postUpdateTemplater -match [regex]::Escape("$newPortableHash'")) -Message 'Dependency updater synchronises managed 7-Zip hash in templater module copy'
+                foreach ($platform in $platforms) {
+                    $platformUpdate = $platformUpdates[$platform]
+                    Assert-True -Condition ($postUpdateSetup -match [regex]::Escape($platformUpdate.NewUrl)) -Message "Dependency updater writes new 7-Zip $platform URL to setup script copy"
+                    Assert-True -Condition ($postUpdateSetup -match [regex]::Escape($platformUpdate.NewHash)) -Message "Dependency updater writes new 7-Zip $platform hash to setup script copy"
+                    Assert-True -Condition ($postUpdateSetup -notmatch [regex]::Escape($platformUpdate.CurrentHash)) -Message "Dependency updater removes old 7-Zip $platform hash from setup script copy"
+                    Assert-True -Condition ($postUpdateTemplater -match "$platform\s*=\s*'$($platformUpdate.NewHash)'") -Message "Dependency updater synchronises managed 7-Zip hash for $platform in templater module copy"
+                }
 
                 $githubFallback = & {
                     param($scriptPath)
@@ -950,3 +1016,5 @@ try {
     # Restore original location
     Set-Location $originalLocation
 }
+
+

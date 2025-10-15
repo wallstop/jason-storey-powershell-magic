@@ -252,13 +252,30 @@ $Dependencies = @{
     '7zip' = @{
         Name = '7-Zip'
         Description = 'Archive extraction tool'
-        TestCommand = @('7z', '--help')
+        TestCommand = @{
+            Windows = @('7z', '--help')
+            MacOS = @('7zz', '--help')
+            Linux = @('7zz', '--help')
+            Default = @('7z', '--help')
+        }
         PortableAssets = @{
             Windows = @{
                 Url = 'https://www.7-zip.org/a/7z2501-x64.exe'
                 Sha256 = '78AFA2A1C773CAF3CF7EDF62F857D2A8A5DA55FB0FFF5DA416074C0D28B2B55F'
                 Executable = '7z.exe'
                 ArchiveType = 'exe'
+            }
+            MacOS = @{
+                Url = 'https://www.7-zip.org/a/7z2501-mac.tar.xz'
+                Sha256 = '26AA75BC262BB10BF0805617B95569C3035C2C590A99F7DB55C7E9607B2685E0'
+                Executable = '7zz'
+                ArchiveType = 'tar.xz'
+            }
+            Linux = @{
+                Url = 'https://www.7-zip.org/a/7z2501-linux-x64.tar.xz'
+                Sha256 = '4CA3B7C6F2F67866B92622818B58233DC70367BE2F36B498EB0BDEAAA44B53F4'
+                Executable = '7zz'
+                ArchiveType = 'tar.xz'
             }
         }
         ScoopPackage = '7zip'
@@ -461,11 +478,32 @@ function Get-PackageManagerExecutable {
 function Get-CommandTokens {
     param(
         [Parameter(Mandatory = $true)]
-        $TestCommand
+        $TestCommand,
+        [string]$Platform
     )
 
     if ($null -eq $TestCommand) {
         return @()
+    }
+
+    if (-not $Platform) {
+        $Platform = $script:CurrentPlatform
+    }
+
+    if ($TestCommand -is [System.Collections.IDictionary]) {
+        $selected = $null
+
+        if ($Platform -and $TestCommand.ContainsKey($Platform)) {
+            $selected = $TestCommand[$Platform]
+        } elseif ($TestCommand.ContainsKey('Default')) {
+            $selected = $TestCommand['Default']
+        }
+
+        if ($null -eq $selected) {
+            return @()
+        }
+
+        return Get-CommandTokens -TestCommand $selected -Platform $Platform
     }
 
     if ($TestCommand -is [System.Collections.IEnumerable] -and -not ($TestCommand -is [string])) {
@@ -500,7 +538,7 @@ function Test-Dependency {
     param($Dependency)
 
     try {
-        $commandTokens = Get-CommandTokens -TestCommand $Dependency.TestCommand
+        $commandTokens = Get-CommandTokens -TestCommand $Dependency.TestCommand -Platform $script:CurrentPlatform
         if (-not $commandTokens) {
             return $false
         }
@@ -536,7 +574,11 @@ function Install-DependencyPortable {
     $archiveType = ($asset.ArchiveType ?? '').ToLowerInvariant()
 
     Write-Warning "SECURITY NOTICE: This will download and execute software from: $portableUrl"
-    Write-Warning 'Files are downloaded without cryptographic verification'
+    if ($portableHash) {
+        Write-Warning "Download will be verified with SHA256: $portableHash"
+    } else {
+        Write-Warning 'No checksum is available; verification will be skipped'
+    }
     Write-Warning 'This will modify your user PATH environment variable'
 
     $confirm = Get-UserResponse "Do you want to proceed with downloading $($Dependency.Name)? Type 'YES' to confirm" 'NO'
@@ -580,10 +622,29 @@ function Install-DependencyPortable {
                 [System.IO.Compression.ZipFile]::ExtractToDirectory($tempFile, $installDir, $true)
                 $extractedPath = $installDir
             }
-            'tar.gz' { $fallthrough = $true }
-            'tgz' {
+            { $_ -in @('tar.gz', 'tgz') } {
                 Write-Info "Extracting $($Dependency.Name) tar archive..."
                 $tarArgs = @('-xzf', $tempFile, '-C', $installDir)
+                $tarResult = & tar @tarArgs 2>&1
+                if ($LASTEXITCODE -ne 0) {
+                    Write-ErrorMessage "Failed to extract tar archive: $tarResult"
+                    return $false
+                }
+                $extractedPath = $installDir
+            }
+            { $_ -in @('tar.xz', 'txz') } {
+                Write-Info "Extracting $($Dependency.Name) tar archive..."
+                $tarArgs = @('-xJf', $tempFile, '-C', $installDir)
+                $tarResult = & tar @tarArgs 2>&1
+                if ($LASTEXITCODE -ne 0) {
+                    Write-ErrorMessage "Failed to extract tar archive: $tarResult"
+                    return $false
+                }
+                $extractedPath = $installDir
+            }
+            { $_ -in @('tar.bz2', 'tbz', 'tbz2') } {
+                Write-Info "Extracting $($Dependency.Name) tar archive..."
+                $tarArgs = @('-xjf', $tempFile, '-C', $installDir)
                 $tarResult = & tar @tarArgs 2>&1
                 if ($LASTEXITCODE -ne 0) {
                     Write-ErrorMessage "Failed to extract tar archive: $tarResult"

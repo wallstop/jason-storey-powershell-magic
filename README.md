@@ -101,7 +101,7 @@ pwsh ./Setup-PowerShellMagic.ps1
 
 - ✅ Asks your permission before any downloads or changes
 - ✅ Creates automatic backups of your PowerShell profile
-- ✅ Installs optional tools (fzf, 7-Zip/p7zip, eza) with your consent
+- ✅ Installs optional tools (fzf, 7-Zip/7zz, eza) with your consent
 - ✅ Shows exactly what it's doing at each step
 - ✅ Uses the right package manager for your system:
   - **Windows:** winget, Scoop, or Chocolatey
@@ -257,7 +257,8 @@ unity-remove mygame                  # Remove from list
 
 **Required:**
 
-- **PowerShell 7.0+** - The cross-platform PowerShell (get it [here](https://github.com/PowerShell/PowerShell))
+- **PowerShell 7.0+** - The cross-platform PowerShell (get it from the
+  [PowerShell releases page](https://github.com/PowerShell/PowerShell))
   - Already have it? Check with: `pwsh --version` or `$PSVersionTable.PSVersion`
   - **Windows:** Comes with Windows 10/11, or download PowerShell 7+
   - **macOS:** Install with `brew install powershell`
@@ -266,8 +267,33 @@ unity-remove mygame                  # Remove from list
 **Optional Tools** (the setup script can install these for you):
 
 - **fzf** - Enables interactive fuzzy finding (highly recommended!) 🔍
-- **7-Zip/p7zip** - Required only for Templater archive support 📦
+- **7-Zip/7zz** - Required only for Templater archive support 📦
 - **eza** - Enhanced directory previews (optional, nice to have) ✨
+
+#### Manual portable downloads
+
+If you cannot use a package manager, download the official binaries below and
+verify the SHA256 checksum before installing:
+
+| Tool  | Platform | Download                       | SHA256 |
+|-------|----------|--------------------------------|--------|
+| 7-Zip | Windows  | [7z 25.01 x64][7zip-win]       | `78AFA2A1C773CAF3CF7EDF62F857D2A8A5DA55FB0FFF5DA416074C0D28B2B55F` |
+| 7-Zip | macOS    | [7z 25.01 macOS][7zip-mac]     | `26AA75BC262BB10BF0805617B95569C3035C2C590A99F7DB55C7E9607B2685E0` |
+| 7-Zip | Linux    | [7z 25.01 linux x64][7zip-linux] | `4CA3B7C6F2F67866B92622818B58233DC70367BE2F36B498EB0BDEAAA44B53F4` |
+| fzf   | Windows  | [fzf 0.66.0 win x64][fzf-win]  | `9D2A1BC6E38665D0A15D846703A2C9EF1F5FE2630A9F972F9832712709C18823` |
+| eza   | Windows  | [eza 0.23.4 win x64][eza-win]  | `05677FD7C2D1B69CE71DF53DB74C29F6331EA0B2BE5AA3A0FCE6976200EE06FC` |
+
+Use `Get-FileHash .\downloaded-file -Algorithm SHA256` (PowerShell) or
+`shasum -a 256 ./downloaded-file` (macOS/Linux) to confirm the checksum matches.
+The setup script, `Tests\Test-PortableDownloads.ps1`, and
+`Scripts\Update-Dependencies.ps1` all enforce the same values so CI/CD reports
+drift immediately.
+
+[7zip-win]: https://www.7-zip.org/a/7z2501-x64.exe
+[7zip-mac]: https://www.7-zip.org/a/7z2501-mac.tar.xz
+[7zip-linux]: https://www.7-zip.org/a/7z2501-linux-x64.tar.xz
+[fzf-win]: https://github.com/junegunn/fzf/releases/download/v0.66.0/fzf-0.66.0-windows_amd64.zip
+[eza-win]: https://github.com/eza-community/eza/releases/download/v0.23.4/eza.exe_x86_64-pc-windows-gnu.zip
 
 ### Installation Methods
 
@@ -291,7 +317,7 @@ pwsh ./Setup-PowerShellMagic.ps1
 **What the setup script does (on all platforms):**
 
 1. ✅ Detects your operating system and available package managers
-2. ✅ Checks for existing tools (fzf, 7-Zip/p7zip, eza)
+2. ✅ Checks for existing tools (fzf, 7-Zip/7zz, eza)
 3. ✅ **Asks your permission** before downloading or installing anything
 4. ✅ Offers to install missing tools using your platform's package manager
 5. ✅ **Creates an automatic backup** of your PowerShell profile
@@ -732,16 +758,22 @@ code (Get-QuickJumpConfigPath)
 
 **Solution:**
 
-```powershell
-# Install 7-Zip
-scoop install 7zip
-# OR
-choco install 7zip
-# OR
-winget install 7zip.7zip
+#### Install 7-Zip / 7zz
 
-# Verify installation
-7z
+- **Windows:** `scoop install 7zip`, `choco install 7zip`, or
+  `winget install 7zip.7zip`
+- **macOS:** `brew install p7zip`
+- **Linux:** `sudo apt install p7zip-full`, `sudo dnf install p7zip`, or
+  `sudo pacman -S p7zip`
+
+#### Verify installation
+
+```powershell
+# Windows
+7z --help
+
+# macOS / Linux
+7zz --help
 ```
 
 **Alternative:** Use folder-based templates instead of archives.
@@ -869,10 +901,9 @@ These tools enhance PowerShell Magic but aren't required:
   - macOS: `brew install fzf`
   - Linux: `sudo apt install fzf` / `sudo dnf install fzf` / `sudo pacman -S fzf`
 
-- **7-Zip (Windows) / p7zip (macOS/Linux)** - For Templater archive
-  support 📦
+- **7-Zip / 7zz** - Cross-platform archive support for Templater 📦
   - Windows: `winget install 7zip` or `scoop install 7zip`
-  - macOS: `brew install p7zip`
+  - macOS: `brew install p7zip` *(installs 7zz command)*
   - Linux: `sudo apt install p7zip-full` / `sudo dnf install p7zip` /
     `sudo pacman -S p7zip`
 
