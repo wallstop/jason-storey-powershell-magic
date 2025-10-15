@@ -1,7 +1,57 @@
 # Unitea.psm1
 using namespace System.Collections.Generic
 
+$script:UnityProjectsCache = $null
+$script:UnityProjectsTimestamp = $null
+
+function New-UnityProjectsData {
+    return [ordered]@{}
+}
+
+function Copy-UnityProjectsData {
+    param(
+        [hashtable]$ProjectsData
+    )
+
+    if (-not $ProjectsData) {
+        return New-UnityProjectsData
+    }
+
+    $json = $ProjectsData | ConvertTo-Json -Depth 10
+    return $json | ConvertFrom-Json -AsHashtable
+}
+
 # Private helper functions
+function ConvertTo-UnityProjectRecord {
+    param(
+        [string]$Alias,
+        [hashtable]$Project
+    )
+
+    $lastOpenedString = if ($Project.LastOpened) { $Project.LastOpened } else { 'Never' }
+    $lastOpenedDate = $null
+
+    if ($lastOpenedString -and $lastOpenedString -ne 'Never') {
+        [DateTime]::TryParseExact(
+            $lastOpenedString,
+            'yyyy-MM-dd HH:mm:ss',
+            $null,
+            [System.Globalization.DateTimeStyles]::AssumeLocal,
+            [ref]$lastOpenedDate
+        ) | Out-Null
+    }
+
+    return [PSCustomObject]@{
+        Alias = $Alias
+        Name = $Project.Name
+        Path = $Project.Path
+        UnityVersion = $Project.UnityVersion
+        DateAdded = $Project.DateAdded
+        LastOpenedString = $lastOpenedString
+        LastOpened = $lastOpenedDate
+    }
+}
+
 function Get-UnityConfigPath {
     <#
     .SYNOPSIS
@@ -35,7 +85,13 @@ function Get-UnityConfigPath {
         [switch]$ReturnDirectory
     )
 
-    $configDir = Join-Path (Split-Path $PROFILE -Parent) '.config\unity'
+    $configRoot = if ($env:XDG_CONFIG_HOME) {
+        $env:XDG_CONFIG_HOME
+    } else {
+        Join-Path (Split-Path $PROFILE -Parent) '.config'
+    }
+
+    $configDir = Join-Path $configRoot 'unity'
     if (-not (Test-Path $configDir)) {
         New-Item -ItemType Directory -Path $configDir -Force | Out-Null
     }
@@ -51,20 +107,68 @@ function Get-UnityProjectsData {
     $configPath = Get-UnityConfigPath
     if (Test-Path $configPath) {
         try {
-            return Get-Content $configPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+            $fileInfo = Get-Item $configPath -ErrorAction Stop
+
+            if ($script:UnityProjectsCache -ne $null -and
+                $script:UnityProjectsTimestamp -eq $fileInfo.LastWriteTimeUtc) {
+                return Copy-UnityProjectsData -ProjectsData $script:UnityProjectsCache
+            }
+
+            $projectsData = Get-Content $configPath -Raw -ErrorAction Stop |
+                ConvertFrom-Json -AsHashtable -ErrorAction Stop
+
+            if (-not $projectsData) {
+                $projectsData = New-UnityProjectsData
+            }
+
+            $script:UnityProjectsCache = Copy-UnityProjectsData -ProjectsData $projectsData
+            $script:UnityProjectsTimestamp = $fileInfo.LastWriteTimeUtc
+
+            return Copy-UnityProjectsData -ProjectsData $projectsData
         } catch {
-            Write-Warning 'Invalid projects.json file. Creating new one.'
-            return @{}
+            Write-Warning "Unity projects configuration at '$configPath' is invalid: $($_.Exception.Message)"
+            $timestamp = Get-Date -Format 'yyyyMMddTHHmmss'
+            $backupPath = "$configPath.backup.$timestamp"
+
+            try {
+                Copy-Item $configPath $backupPath -Force
+                Write-Warning "Backup created at: $backupPath"
+            } catch {
+                Write-Warning "Failed to create backup for corrupt Unity projects configuration: $($_.Exception.Message)"
+            }
+
+            $resetData = New-UnityProjectsData
+
+            try {
+                Save-UnityProjectsData -ProjectsData $resetData
+            } catch {
+                Write-Warning "Failed to reset Unity projects configuration: $($_.Exception.Message)"
+            }
+
+            return Copy-UnityProjectsData -ProjectsData $resetData
         }
     }
-    return @{}
+
+    $data = New-UnityProjectsData
+    $script:UnityProjectsCache = Copy-UnityProjectsData -ProjectsData $data
+    $script:UnityProjectsTimestamp = $null
+    return Copy-UnityProjectsData -ProjectsData $data
 }
 
 function Save-UnityProjectsData {
     param([hashtable]$ProjectsData)
 
     $configPath = Get-UnityConfigPath
-    $ProjectsData | ConvertTo-Json -Depth 3 | Set-Content $configPath -Encoding UTF8
+    try {
+        $json = $ProjectsData | ConvertTo-Json -Depth 5
+        $json | Set-Content $configPath -Encoding UTF8
+        $fileInfo = Get-Item $configPath -ErrorAction Stop
+        $script:UnityProjectsCache = Copy-UnityProjectsData -ProjectsData $ProjectsData
+        $script:UnityProjectsTimestamp = $fileInfo.LastWriteTimeUtc
+    } catch {
+        $message = "Failed to save Unity projects data to '$configPath'. $($_.Exception.Message)"
+        throw (New-Object System.Exception($message, $_.Exception))
+    }
 }
 
 function Update-LastOpened {
@@ -265,11 +369,14 @@ function Get-UnityProjects {
     $projectsData = Get-UnityProjectsData
 
     if ($projectsData.Count -eq 0) {
-        Write-Host "No Unity projects saved yet. Use 'Add-UnityProject' to add projects." -ForegroundColor Yellow
-        return
+        if ($Alias) {
+            Write-Error "No project found with alias '$Alias'"
+        } elseif ($Interactive) {
+            Write-Host "No Unity projects saved yet. Use 'Add-UnityProject' to add projects." -ForegroundColor Yellow
+        }
+        return @()
     }
 
-    # If alias specified, either return path or open project
     if ($Alias) {
         if ($projectsData.ContainsKey($Alias)) {
             $project = $projectsData[$Alias]
@@ -281,12 +388,29 @@ function Get-UnityProjects {
             }
         } else {
             Write-Error "No project found with alias '$Alias'"
-            Write-Host "Available aliases: $($projectsData.Keys -join ', ')" -ForegroundColor Yellow
+            $availableAliases = $projectsData.Keys
+            if ($availableAliases) {
+                Write-Host "Available aliases: $($availableAliases -join ', ')" -ForegroundColor Yellow
+            }
         }
         return
     }
 
-    # Interactive mode with fzf
+    $records = @()
+    foreach ($entry in $projectsData.GetEnumerator()) {
+        $records += ConvertTo-UnityProjectRecord -Alias $entry.Key -Project $entry.Value
+    }
+
+    $sortedRecords = if ($SortByRecent) {
+        $records | Sort-Object -Descending -Property @{
+            Expression = {
+                if ($_.LastOpened) { $_.LastOpened } else { [DateTime]::MinValue }
+            }
+        }, @{ Expression = { $_.Alias } }
+    } else {
+        $records | Sort-Object -Property Alias
+    }
+
     if ($Interactive) {
         if (-not (Test-FzfAvailable)) {
             Write-Error 'fzf is not available. Please install fzf first.'
@@ -295,26 +419,21 @@ function Get-UnityProjects {
             return
         }
 
-        # Prepare data for fzf - sort by recent if requested or by alias
-        $sortedProjects = if ($SortByRecent) {
-            $projectsData.GetEnumerator() | Sort-Object {
-                if ($_.Value.LastOpened -eq 'Never') {
-                    [DateTime]::MinValue
-                } else {
-                    [DateTime]::ParseExact($_.Value.LastOpened, 'yyyy-MM-dd HH:mm:ss', $null)
-                }
-            } -Descending
-        } else {
-            $projectsData.GetEnumerator() | Sort-Object Key
-        }
-
         $fzfItems = @()
-        $sortedProjects | ForEach-Object {
-            $alias = $_.Key
-            $project = $_.Value
-            $lastOpened = if ($project.LastOpened -eq 'Never') { 'Never' } else { $project.LastOpened }
-            # Format: "alias | project_name | unity_version | last_opened | path"
-            $fzfItems += @("$alias", "$($project.Name)", "$($project.UnityVersion)", "$lastOpened", "$($project.Path)") -join ' | '
+        foreach ($record in $sortedRecords) {
+            $lastOpenedText = if ($record.LastOpened) {
+                $record.LastOpened.ToString('yyyy-MM-dd HH:mm:ss')
+            } else {
+                $record.LastOpenedString
+            }
+
+            $fzfItems += @(
+                "$($record.Alias)",
+                "$($record.Name)",
+                "$($record.UnityVersion)",
+                "$lastOpenedText",
+                "$($record.Path)"
+            ) -join ' | '
         }
 
         if ($fzfItems.Count -eq 0) {
@@ -322,55 +441,39 @@ function Get-UnityProjects {
             return
         }
 
-        # Use fzf to select project
         try {
             $headerText = if ($Path) { 'Select Unity Project (will return path)' } else { 'Select Unity Project' }
+            if ($SortByRecent) {
+                $headerText += ' - Sorted by Recent'
+            }
+
             $selected = $fzfItems | fzf --height=40% --reverse --border --header="$headerText" --delimiter='|' --with-nth=1, 2, 3, 4 --preview='Write-Output {5}'
 
             if ($selected) {
-                $alias = ($selected -split ' \| ')[0].Trim()
-                $project = $projectsData[$alias]
+                $segments = $selected -split '\s*\|\s*'
+                $selectedAlias = $segments[0]
+                $selectedRecord = $sortedRecords | Where-Object { $_.Alias -eq $selectedAlias } | Select-Object -First 1
+
+                if (-not $selectedRecord) {
+                    Write-Warning "Unable to resolve selection for alias '$selectedAlias'"
+                    return
+                }
 
                 if ($Path) {
-                    return $project.Path
+                    return $selectedRecord.Path
                 } else {
-                    Write-Host "Opening $($project.Name)..." -ForegroundColor Green
-                    Open-UnityProject -ProjectPath $project.Path -Alias $alias
+                    Write-Host "Opening $($selectedRecord.Name)..." -ForegroundColor Green
+                    Open-UnityProject -ProjectPath $selectedRecord.Path -Alias $selectedRecord.Alias
                 }
             }
         } catch {
             Write-Error "Error running fzf: $($_.Exception.Message)"
         }
-    } else {
-        # Just list projects
-        Write-Host "`nSaved Unity Projects:" -ForegroundColor Cyan
-        Write-Host ('=' * 90) -ForegroundColor Cyan
 
-        # Sort projects
-        $sortedProjects = if ($SortByRecent) {
-            $projectsData.GetEnumerator() | Sort-Object {
-                if ($_.Value.LastOpened -eq 'Never') {
-                    [DateTime]::MinValue
-                } else {
-                    [DateTime]::ParseExact($_.Value.LastOpened, 'yyyy-MM-dd HH:mm:ss', $null)
-                }
-            } -Descending
-        } else {
-            $projectsData.GetEnumerator() | Sort-Object Key
-        }
-
-        $sortedProjects | ForEach-Object {
-            $lastOpened = if ($_.Value.LastOpened -eq 'Never') { 'Never' } else { $_.Value.LastOpened }
-            Write-Host "$($_.Key.PadRight(15)) $($_.Value.Name.PadRight(25)) $($_.Value.UnityVersion.PadRight(12)) $lastOpened" -ForegroundColor White
-            Write-Host "$(' '*15) $($_.Value.Path)" -ForegroundColor Gray
-            Write-Host ''
-        }
-
-        Write-Host "Use 'Get-UnityProjects -Interactive' for fzf selection" -ForegroundColor Yellow
-        Write-Host "Use 'Get-UnityProjects -SortByRecent' to sort by last opened" -ForegroundColor Yellow
-        Write-Host "Use 'Get-UnityProjects -Alias <alias>' to open directly" -ForegroundColor Yellow
-        Write-Host "Use 'Get-UnityProjects -Alias <alias> -Path' to get project path" -ForegroundColor Yellow
+        return
     }
+
+    return $sortedRecords
 }
 
 function Open-RecentUnityProject {

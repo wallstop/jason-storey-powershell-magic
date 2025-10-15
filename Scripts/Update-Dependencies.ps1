@@ -50,14 +50,194 @@ function Write-Info {
     Write-Host "[INFO] $Message" -ForegroundColor Cyan
 }
 
-function Write-Warning {
+function Write-WarningMessage {
+    param($Message)
+    Microsoft.PowerShell.Utility\Write-Warning "[WARN] $Message"
+}
+
+function Write-ErrorMessage {
+    param($Message)
+    Microsoft.PowerShell.Utility\Write-Error -Message "[ERROR] $Message"
+}
+function Write-HostWarning {
     param($Message)
     Write-Host "[WARN] $Message" -ForegroundColor Yellow
 }
 
-function Write-Error {
+function Write-HostError {
     param($Message)
     Write-Host "[ERROR] $Message" -ForegroundColor Red
+}
+
+$script:DependencyUserAgent = 'PowerShellMagic-DependencyUpdater/1.0 (+https://github.com/jason-storey/powershell-magic)'
+$script:DefaultAcceptLanguages = 'en-US,en;q=0.9'
+
+function Reset-DependencyHttpInvoker {
+    $script:InvokeRestMethodDelegate = {
+        param($parameters)
+        Invoke-RestMethod @parameters
+    }
+
+    $script:InvokeWebRequestDelegate = {
+        param($parameters)
+        Invoke-WebRequest @parameters
+    }
+}
+
+Reset-DependencyHttpInvoker
+
+function Set-DependencyHttpInvoker {
+    param(
+        [ScriptBlock]$RestMethod,
+        [ScriptBlock]$WebRequest,
+        [switch]$Reset
+    )
+
+    if ($Reset) {
+        Reset-DependencyHttpInvoker
+        return
+    }
+
+    if ($PSBoundParameters.ContainsKey('RestMethod')) {
+        $script:InvokeRestMethodDelegate = $RestMethod
+    }
+
+    if ($PSBoundParameters.ContainsKey('WebRequest')) {
+        $script:InvokeWebRequestDelegate = $WebRequest
+    }
+}
+
+function Get-DependencyHttpHeaders {
+    param(
+        [string]$Accept = '*/*',
+        [hashtable]$AdditionalHeaders
+    )
+
+    $headers = [ordered]@{
+        'User-Agent' = $script:DependencyUserAgent
+        'Accept' = $Accept
+        'Accept-Language' = $script:DefaultAcceptLanguages
+    }
+
+    if ($AdditionalHeaders) {
+        foreach ($key in $AdditionalHeaders.Keys) {
+            $headers[$key] = $AdditionalHeaders[$key]
+        }
+    }
+
+    return $headers
+}
+
+function Invoke-DependencyRestMethod {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Uri,
+
+        [string]$Accept = 'application/json',
+
+        [hashtable]$AdditionalHeaders
+    )
+
+    $headers = Get-DependencyHttpHeaders -Accept $Accept -AdditionalHeaders $AdditionalHeaders
+    $parameters = @{
+        Uri = $Uri
+        Headers = $headers
+        ErrorAction = 'Stop'
+        Method = 'GET'
+    }
+
+    return & $script:InvokeRestMethodDelegate $parameters
+}
+
+function Invoke-DependencyWebRequest {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Uri,
+
+        [string]$Accept = 'text/html,application/xhtml+xml',
+
+        [hashtable]$AdditionalHeaders,
+
+        [switch]$DisableRedirect
+    )
+
+    $headers = Get-DependencyHttpHeaders -Accept $Accept -AdditionalHeaders $AdditionalHeaders
+
+    $parameters = @{
+        Uri = $Uri
+        Headers = $headers
+        ErrorAction = 'Stop'
+    }
+
+    if ($DisableRedirect) {
+        $parameters.MaximumRedirection = 0
+    }
+
+    if ($PSVersionTable.PSVersion.Major -lt 6) {
+        $parameters.UseBasicParsing = $true
+    }
+
+    return & $script:InvokeWebRequestDelegate $parameters
+}
+
+function Get-GitHubLatestReleaseTag {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Repository
+    )
+
+    $apiUri = "https://api.github.com/repos/$Repository/releases/latest"
+
+    try {
+        $additionalHeaders = @{
+            'Accept' = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
+        }
+
+        $response = Invoke-DependencyRestMethod -Uri $apiUri -Accept 'application/vnd.github+json' -AdditionalHeaders $additionalHeaders
+        if ($response -and $response.tag_name) {
+            return $response.tag_name
+        }
+
+        Write-WarningMessage "GitHub API response for '$Repository' did not include a tag_name. Falling back to HTML parsing."
+    } catch {
+        Write-WarningMessage "GitHub API request for '$Repository' failed: $($_.Exception.Message). Falling back to HTML parsing."
+    }
+
+    $fallbackUri = "https://github.com/$Repository/releases/latest"
+
+    try {
+        $webResponse = Invoke-DependencyWebRequest -Uri $fallbackUri -Accept 'text/html,application/xhtml+xml'
+        $redirectUri = $null
+
+        if ($webResponse.BaseResponse -and $webResponse.BaseResponse.ResponseUri) {
+            $redirectUri = $webResponse.BaseResponse.ResponseUri.AbsoluteUri
+        }
+
+        if (-not $redirectUri -and $webResponse.Headers -and $webResponse.Headers['Location']) {
+            $redirectUri = $webResponse.Headers['Location']
+        }
+
+        if ($redirectUri) {
+            $match = [regex]::Match($redirectUri, '/releases/tag/(?<tag>[^/]+)$')
+            if ($match.Success) {
+                return $match.Groups['tag'].Value
+            }
+        }
+
+        if ($webResponse.Content) {
+            $match = [regex]::Match($webResponse.Content, 'releases/tag/(?<tag>[^"''\s]+)')
+            if ($match.Success) {
+                return $match.Groups['tag'].Value
+            }
+        }
+
+        Write-WarningMessage "GitHub fallback response for '$Repository' did not include a release tag."
+    } catch {
+        Write-WarningMessage "GitHub fallback request for '$Repository' failed: $($_.Exception.Message)"
+    }
+
+    return $null
 }
 
 # Dependency update definitions
@@ -68,8 +248,8 @@ $DependencyUpdaters = @{
         AssetPattern = 'fzf-*-windows_amd64.zip'
         CurrentUrlPattern = 'https://github.com/junegunn/fzf/releases/download/v*/fzf-*-windows_amd64.zip'
         GetLatestVersion = {
-            $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/junegunn/fzf/releases/latest"
-            return $releases.tag_name.TrimStart('v')
+            $tag = Get-GitHubLatestReleaseTag -Repository 'junegunn/fzf'
+            return $tag.TrimStart('v')
         }
         BuildUrl = {
             param($Version)
@@ -79,21 +259,41 @@ $DependencyUpdaters = @{
     '7zip' = @{
         Name = '7-Zip'
         GetLatestVersion = {
-            # 7-Zip doesn't have a proper API, so we scrape the download page
+            # 7-Zip doesn't have a proper API, so we scrape the download page with a fallback mirror
+            $primaryUri = 'https://www.7-zip.org/download.html'
+            $fallbackUri = 'https://sourceforge.net/projects/sevenzip/files/7-Zip/'
+            $pageContent = $null
+
             try {
-                $response = Invoke-WebRequest -Uri "https://www.7-zip.org/download.html" -UseBasicParsing
-                # Look for the x64 exe download link
-                if ($response.Content -match 'href="a/(7z(\d+)-x64\.exe)"') {
-                    $filename = $matches[1]
-                    # Extract version from filename (e.g., 7z2407-x64.exe -> 2407)
-                    if ($filename -match '7z(\d+)-x64\.exe') {
-                        return $matches[1]
-                    }
-                }
+                $response = Invoke-DependencyWebRequest -Uri $primaryUri -Accept 'text/html,application/xhtml+xml'
+                $pageContent = $response.Content
             } catch {
-                Write-Warning "Failed to check 7-Zip version: $($_.Exception.Message)"
+                Write-WarningMessage "Failed to fetch primary 7-Zip metadata: $($_.Exception.Message). Trying fallback mirror."
+                try {
+                    $fallbackResponse = Invoke-DependencyWebRequest -Uri $fallbackUri -Accept 'text/html,application/xhtml+xml'
+                    $pageContent = $fallbackResponse.Content
+                } catch {
+                    Write-WarningMessage "Failed to fetch fallback 7-Zip metadata: $($_.Exception.Message)"
+                    return $null
+                }
+            }
+
+            if (-not $pageContent) {
+                Write-WarningMessage 'Unable to retrieve 7-Zip version metadata from all sources.'
                 return $null
             }
+
+            $versionMatch = [regex]::Match($pageContent, 'href="a/7z(?<version>\d+)-x64\.exe"', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+            if ($versionMatch.Success) {
+                return $versionMatch.Groups['version'].Value
+            }
+
+            $secondaryMatch = [regex]::Match($pageContent, '7z(?<version>\d+)-x64\.exe', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+            if ($secondaryMatch.Success) {
+                return $secondaryMatch.Groups['version'].Value
+            }
+
+            Write-WarningMessage 'Unable to parse 7-Zip version from download metadata.'
             return $null
         }
         BuildUrl = {
@@ -107,8 +307,8 @@ $DependencyUpdaters = @{
         AssetPattern = 'eza.exe_x86_64-pc-windows-gnu.zip'
         CurrentUrlPattern = 'https://github.com/eza-community/eza/releases/download/v*/eza.exe_x86_64-pc-windows-gnu.zip'
         GetLatestVersion = {
-            $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/eza-community/eza/releases/latest"
-            return $releases.tag_name.TrimStart('v')
+            $tag = Get-GitHubLatestReleaseTag -Repository 'eza-community/eza'
+            return $tag.TrimStart('v')
         }
         BuildUrl = {
             param($Version)
@@ -123,7 +323,7 @@ function Get-CurrentDependencies {
     Parse the current dependencies from Setup-PowerShellMagic.ps1
     #>
 
-    $setupScript = Join-Path $PSScriptRoot "..\Setup-PowerShellMagic.ps1"
+    $setupScript = Join-Path $PSScriptRoot '..\Setup-PowerShellMagic.ps1'
     if (-not (Test-Path $setupScript)) {
         throw "Setup-PowerShellMagic.ps1 not found at: $setupScript"
     }
@@ -190,21 +390,33 @@ function Get-FileHash-Remote {
         $ProgressPreference = 'SilentlyContinue'
 
         try {
-            Invoke-WebRequest -Uri $Url -OutFile $tempFile -UseBasicParsing
+            $downloadHeaders = Get-DependencyHttpHeaders -Accept 'application/octet-stream'
+            $invokeParams = @{
+                Uri = $Url
+                OutFile = $tempFile
+                Headers = $downloadHeaders
+                ErrorAction = 'Stop'
+            }
+
+            if ($PSVersionTable.PSVersion.Major -lt 6) {
+                $invokeParams.UseBasicParsing = $true
+            }
+
+            Invoke-WebRequest @invokeParams
         } finally {
             $ProgressPreference = $progressPreference
         }
 
         if (-not (Test-Path $tempFile)) {
-            throw "Download failed - file not created"
+            throw 'Download failed - file not created'
         }
 
-        $hash = Get-FileHash -Path $tempFile -Algorithm SHA256
+        $hash = Get-FileHash -Path $tempFile -Algorithm SHA256 -ErrorAction Stop
         Write-Success "Successfully calculated hash for $DependencyName"
         return $hash.Hash
 
     } catch {
-        Write-Error "Failed to download and hash $DependencyName from $Url`: $($_.Exception.Message)"
+        Write-ErrorMessage "Failed to download and hash $DependencyName from $Url`: $($_.Exception.Message)"
         return $null
     } finally {
         if (Test-Path $tempFile) {
@@ -219,7 +431,7 @@ function Test-DependencyUpdates {
     Check if any dependencies have updates available
     #>
 
-    Write-Info "Checking for dependency updates..."
+    Write-Info 'Checking for dependency updates...'
 
     $currentDeps = Get-CurrentDependencies
     $updatesAvailable = @{}
@@ -230,7 +442,7 @@ function Test-DependencyUpdates {
         $currentDep = $currentDeps[$depKey]
 
         if (-not $currentDep) {
-            Write-Warning "No current dependency found for $($updater.Name)"
+            Write-WarningMessage "No current dependency found for $($updater.Name)"
             continue
         }
 
@@ -240,7 +452,7 @@ function Test-DependencyUpdates {
             $latestVersion = & $updater.GetLatestVersion
 
             if (-not $latestVersion) {
-                Write-Warning "Could not determine latest version for $($updater.Name)"
+                Write-WarningMessage "Could not determine latest version for $($updater.Name)"
                 continue
             }
 
@@ -264,25 +476,25 @@ function Test-DependencyUpdates {
                     $summary += "- $($updater.Name): $($currentDep.Version) -> $latestVersion"
                     Write-Success "$($updater.Name) update available: $($currentDep.Version) -> $latestVersion"
                 } else {
-                    Write-Error "Failed to verify new version of $($updater.Name)"
+                    Write-ErrorMessage "Failed to verify new version of $($updater.Name)"
                 }
             } else {
                 Write-Success "$($updater.Name) is up to date"
             }
         } catch {
-            Write-Error "Error checking $($updater.Name): $($_.Exception.Message)"
+            Write-ErrorMessage "Error checking $($updater.Name): $($_.Exception.Message)"
         }
     }
 
     # Save summary for GitHub Actions
     if ($summary.Count -gt 0) {
         $summaryText = $summary -join "`n"
-        Set-Content -Path "dependency-update-summary.txt" -Value $summaryText
-        $env:UPDATES_AVAILABLE = "true"
+        Set-Content -Path 'dependency-update-summary.txt' -Value $summaryText
+        $env:UPDATES_AVAILABLE = 'true'
         Write-Info "Updates available: $($updatesAvailable.Count) dependencies"
     } else {
-        $env:UPDATES_AVAILABLE = "false"
-        Write-Info "No updates available"
+        $env:UPDATES_AVAILABLE = 'false'
+        Write-Info 'No updates available'
     }
 
     return $updatesAvailable
@@ -297,13 +509,13 @@ function Update-SetupScript {
         [hashtable]$Updates
     )
 
-    $setupScript = Join-Path $PSScriptRoot "..\Setup-PowerShellMagic.ps1"
+    $setupScript = Join-Path $PSScriptRoot '..\Setup-PowerShellMagic.ps1'
 
     if (-not (Test-Path $setupScript)) {
         throw "Setup-PowerShellMagic.ps1 not found at: $setupScript"
     }
 
-    Write-Info "Updating Setup-PowerShellMagic.ps1..."
+    Write-Info 'Updating Setup-PowerShellMagic.ps1...'
 
     # Create backup
     $backupPath = "$setupScript.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
@@ -311,6 +523,9 @@ function Update-SetupScript {
     Write-Info "Backup created at: $backupPath"
 
     $content = Get-Content $setupScript -Raw
+    $templaterModulePath = Join-Path $PSScriptRoot '..\Modules\Templater\Templater.psm1'
+    $templaterContent = $null
+    $templaterUpdated = $false
 
     foreach ($depKey in $Updates.Keys) {
         $update = $Updates[$depKey]
@@ -324,44 +539,70 @@ function Update-SetupScript {
         $content = $content.Replace($update.CurrentHash, $update.NewHash)
 
         Write-Success "Updated $($update.Name): $($update.CurrentVersion) -> $($update.LatestVersion)"
+
+        if ($depKey -eq '7zip' -and (Test-Path $templaterModulePath)) {
+            if (-not $templaterContent) {
+                $templaterContent = Get-Content $templaterModulePath -Raw
+            }
+
+            $originalModuleContent = $templaterContent
+            $newHashValue = $update.NewHash
+            $pattern = "(\$script:Managed7ZipHash = ')[A-F0-9]+'"
+            $templaterContent = [System.Text.RegularExpressions.Regex]::Replace(
+                $templaterContent,
+                $pattern,
+                { param($m) "{0}{1}'" -f $m.Groups[1].Value, $newHashValue }
+            )
+
+            if ($templaterContent -ne $originalModuleContent) {
+                $templaterUpdated = $true
+                Write-Success 'Updated Templater managed 7-Zip hash'
+            } else {
+                Write-Warning 'Failed to update managed 7-Zip hash in Templater module automatically.'
+            }
+        }
     }
 
     # Write updated content
     Set-Content -Path $setupScript -Value $content -Encoding UTF8
-    Write-Success "Setup script updated successfully"
+    Write-Success 'Setup script updated successfully'
+
+    if ($templaterUpdated -and $templaterContent) {
+        Set-Content -Path $templaterModulePath -Value $templaterContent -Encoding UTF8
+    }
 }
 
 function Main {
     try {
         if ($CheckOnly) {
-            Write-Info "Running in check-only mode..."
+            Write-Info 'Running in check-only mode...'
             $updates = Test-DependencyUpdates
 
             if ($updates.Count -gt 0) {
                 Write-Success "Found $($updates.Count) dependency updates available"
                 exit 0
             } else {
-                Write-Info "No dependency updates available"
+                Write-Info 'No dependency updates available'
                 exit 0
             }
         }
 
         if ($Apply) {
-            Write-Info "Applying dependency updates..."
+            Write-Info 'Applying dependency updates...'
             $updates = Test-DependencyUpdates
 
             if ($updates.Count -gt 0) {
                 Update-SetupScript -Updates $updates
-                Write-Success "All dependency updates applied successfully"
+                Write-Success 'All dependency updates applied successfully'
                 exit 0
             } else {
-                Write-Info "No updates to apply"
+                Write-Info 'No updates to apply'
                 exit 0
             }
         }
 
         # Default behavior: check for updates and show what would be done
-        Write-Info "Checking for available dependency updates..."
+        Write-Info 'Checking for available dependency updates...'
         $updates = Test-DependencyUpdates
 
         if ($updates.Count -gt 0) {
@@ -374,14 +615,16 @@ function Main {
             }
             Write-Host "`nRun with -Apply to update the setup script" -ForegroundColor Cyan
         } else {
-            Write-Success "All dependencies are up to date!"
+            Write-Success 'All dependencies are up to date!'
         }
 
     } catch {
-        Write-Error "Script failed: $($_.Exception.Message)"
+        Write-ErrorMessage "Script failed: $($_.Exception.Message)"
         exit 1
     }
 }
 
-# Run main function
-Main
+if ($MyInvocation.InvocationName -ne '.') {
+    # Run main function when executed normally (not dot-sourced)
+    Main
+}

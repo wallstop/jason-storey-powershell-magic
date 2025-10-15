@@ -36,11 +36,11 @@ param(
 
 # Color output functions
 function Write-Success { param($Message) Write-Host "✅ $Message" -ForegroundColor Green }
-function Write-Info {
-    param($Message) Write-Host "ℹ️ $Message" -ForegroundColor Cyan
-}
-function Write-Warning { param($Message) Write-Host "⚠️ $Message" -ForegroundColor Yellow }
-function Write-Error { param($Message) Write-Host "❌ $Message" -ForegroundColor Red }
+function Write-Info { param($Message) Write-Host "ℹ️ $Message" -ForegroundColor Cyan }
+function Write-WarningMessage { param($Message) Microsoft.PowerShell.Utility\Write-Warning "⚠️ $Message" }
+function Write-ErrorMessage { param($Message) Microsoft.PowerShell.Utility\Write-Error -Message "❌ $Message" }
+function Write-HostWarning { param($Message) Write-Host "⚠️ $Message" -ForegroundColor Yellow }
+function Write-HostError { param($Message) Write-Host "❌ $Message" -ForegroundColor Red }
 
 function Test-PreCommitFramework {
     try {
@@ -78,7 +78,7 @@ function Install-PreCommitFramework {
     Write-Info 'Installing Python pre-commit framework...'
 
     if (-not (Test-PythonAvailable)) {
-        Write-Error 'Python is required for pre-commit framework'
+        Write-ErrorMessage 'Python is required for pre-commit framework'
         Write-Info 'Install Python from: https://python.org'
         return $false
     }
@@ -89,7 +89,7 @@ function Install-PreCommitFramework {
         python -m pip install pre-commit
 
         if ($LASTEXITCODE -ne 0) {
-            Write-Error 'Failed to install pre-commit framework'
+            Write-ErrorMessage 'Failed to install pre-commit framework'
             return $false
         }
 
@@ -98,7 +98,7 @@ function Install-PreCommitFramework {
         pre-commit install
 
         if ($LASTEXITCODE -ne 0) {
-            Write-Error 'Failed to install pre-commit hooks'
+            Write-ErrorMessage 'Failed to install pre-commit hooks'
             return $false
         }
 
@@ -106,7 +106,7 @@ function Install-PreCommitFramework {
         return $true
 
     } catch {
-        Write-Error "Failed to install pre-commit framework: $($_.Exception.Message)"
+        Write-ErrorMessage "Failed to install pre-commit framework: $($_.Exception.Message)"
         return $false
     }
 }
@@ -118,12 +118,12 @@ function Install-GitHooks {
     $sourceHooksDir = 'hooks'
 
     if (-not (Test-Path $gitHooksDir)) {
-        Write-Error "Git hooks directory not found: $gitHooksDir"
+        Write-ErrorMessage "Git hooks directory not found: $gitHooksDir"
         return $false
     }
 
     if (-not (Test-Path $sourceHooksDir)) {
-        Write-Error "Source hooks directory not found: $sourceHooksDir"
+        Write-ErrorMessage "Source hooks directory not found: $sourceHooksDir"
         return $false
     }
 
@@ -172,7 +172,7 @@ function Install-GitHooks {
         return $true
 
     } catch {
-        Write-Error "Failed to install Git hooks: $($_.Exception.Message)"
+        Write-ErrorMessage "Failed to install Git hooks: $($_.Exception.Message)"
         return $false
     }
 }
@@ -220,7 +220,7 @@ function Main {
 
     # Validate we're in a Git repository
     if (-not (Test-GitRepository)) {
-        Write-Error 'Not in a Git repository'
+        Write-ErrorMessage 'Not in a Git repository'
         exit 1
     }
 
@@ -239,7 +239,7 @@ function Main {
             if (Test-PreCommitFramework -or (Install-PreCommitFramework)) {
                 $success = Install-PreCommitFramework
             } else {
-                Write-Warning 'Failed to install pre-commit framework, falling back to Git hooks'
+        Write-WarningMessage 'Failed to install pre-commit framework, falling back to Git hooks'
                 $success = Install-GitHooks
             }
         }
@@ -252,7 +252,7 @@ function Main {
             $success = $success1 -or $success2
 
             if ($success1 -and $success2) {
-                Write-Warning 'Both methods installed. Pre-commit framework will take precedence.'
+        Write-WarningMessage 'Both methods installed. Pre-commit framework will take precedence.'
             }
         }
     }
@@ -261,7 +261,7 @@ function Main {
         Write-Success 'Pre-commit hooks setup completed!'
         Show-HookInfo
     } else {
-        Write-Error 'Failed to setup pre-commit hooks'
+        Write-ErrorMessage 'Failed to setup pre-commit hooks'
         exit 1
     }
 }

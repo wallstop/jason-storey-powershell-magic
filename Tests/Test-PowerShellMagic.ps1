@@ -361,40 +361,298 @@ function Test-Templater {
         $modulePath = Join-Path $PSScriptRoot '..\Modules\Templater'
         Import-Module $modulePath -Force
 
-        # Test core commands exist
-        $expectedCommands = @(
-            'Get-Templates',
-            'Add-Template',
-            'Use-Template',
-            'Remove-Template'
-        )
-
-        foreach ($cmd in $expectedCommands) {
-            $command = Get-Command $cmd -ErrorAction SilentlyContinue
-            Assert-NotNull -Value $command -Message "Command $cmd exists"
+        $templaterTestRoot = Join-Path $PSScriptRoot '..\TestArtifacts\Templater'
+        if (Test-Path $templaterTestRoot) {
+            Remove-Item -Path $templaterTestRoot -Recurse -Force -ErrorAction SilentlyContinue
         }
+        New-Item -ItemType Directory -Path $templaterTestRoot -Force | Out-Null
 
-        # Test configuration functions
-        $configFunc = Get-Command 'Get-TemplaterConfigPath' -ErrorAction SilentlyContinue
-        if ($configFunc) {
-            try {
-                $configPath = Get-TemplaterConfigPath
-                Assert-NotNull -Value $configPath -Message 'Templater config path function returns value'
-            } catch {
-                Write-TestWarning "Templater config path function error: $($_.Exception.Message)"
-            }
-        }
+        $previousXdg = $env:XDG_CONFIG_HOME
+        $env:XDG_CONFIG_HOME = $templaterTestRoot
 
-        # Test without external dependencies (7-Zip)
         try {
-            $templates = Get-Templates -ErrorAction SilentlyContinue
-            Write-TestInfo 'Templater handles missing dependencies gracefully'
-            $Script:TestResults.Passed++
-        } catch {
-            Write-TestWarning "Templater dependency handling: $($_.Exception.Message)"
-        }
+            # Test core commands exist
+            $expectedCommands = @(
+                'Get-Templates',
+                'Add-Template',
+                'Use-Template',
+                'Remove-Template'
+            )
 
-        Remove-Module Templater -Force -ErrorAction SilentlyContinue
+            foreach ($cmd in $expectedCommands) {
+                $command = Get-Command $cmd -ErrorAction SilentlyContinue
+                Assert-NotNull -Value $command -Message "Command $cmd exists"
+            }
+
+            # Test configuration functions
+            $configFunc = Get-Command 'Get-TemplaterConfigPath' -ErrorAction SilentlyContinue
+            if ($configFunc) {
+                try {
+                    $configPath = Get-TemplaterConfigPath
+                    Assert-NotNull -Value $configPath -Message 'Templater config path function returns value'
+                    if ($configPath) {
+                        $normalizedRoot = [System.IO.Path]::GetFullPath($templaterTestRoot)
+                        $normalizedConfig = [System.IO.Path]::GetFullPath($configPath)
+                        $comparisonType = if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+                            [System.StringComparison]::OrdinalIgnoreCase
+                        } else {
+                            [System.StringComparison]::Ordinal
+                        }
+                        Assert-True -Condition ($normalizedConfig.StartsWith($normalizedRoot, $comparisonType)) -Message 'Templater config path respects XDG override'
+                    }
+                } catch {
+                    Write-TestWarning "Templater config path function error: $($_.Exception.Message)"
+                }
+            }
+
+            # Test without external dependencies (7-Zip)
+            try {
+                $templates = Get-Templates -ErrorAction SilentlyContinue
+                Write-TestInfo 'Templater handles missing dependencies gracefully'
+                $Script:TestResults.Passed++
+            } catch {
+                Write-TestWarning "Templater dependency handling: $($_.Exception.Message)"
+            }
+
+            # Regression test: archive redeployment with Force
+            try {
+                $workspaceRoot = Join-Path $templaterTestRoot 'Workspace'
+                if (Test-Path $workspaceRoot) {
+                    Remove-Item -Path $workspaceRoot -Recurse -Force -ErrorAction SilentlyContinue
+                }
+                New-Item -ItemType Directory -Path $workspaceRoot -Force | Out-Null
+
+                Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction Stop
+
+                $templateSource = Join-Path $workspaceRoot 'template-source'
+                $null = New-Item -ItemType Directory -Path $templateSource -Force
+                $templateFile = Join-Path $templateSource 'hello.txt'
+                Set-Content -Path $templateFile -Value 'version 1' -Encoding UTF8
+
+                $zipPath = Join-Path $workspaceRoot 'template.zip'
+                if (Test-Path $zipPath) {
+                    Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue
+                }
+                [System.IO.Compression.ZipFile]::CreateFromDirectory($templateSource, $zipPath)
+
+                $alias = "templater-redeploy-$([System.Guid]::NewGuid().ToString('N').Substring(0, 8))"
+                Add-Template -Alias $alias -Path $zipPath -Description 'Regression template' -Force -ErrorAction Stop
+
+                $outputDir = Join-Path $workspaceRoot 'deployment'
+                if (Test-Path $outputDir) {
+                    Remove-Item -Path $outputDir -Recurse -Force -ErrorAction SilentlyContinue
+                }
+                $null = New-Item -ItemType Directory -Path $outputDir -Force
+
+                Use-Template -Alias $alias -DestinationPath $outputDir -ErrorAction Stop | Out-Null
+                $initialContent = Get-Content -Path (Join-Path $outputDir 'hello.txt') -Raw -ErrorAction Stop
+                Assert-Equal -Expected 'version 1' -Actual ($initialContent.Trim()) -Message 'Initial template extraction writes original content'
+
+                Set-Content -Path $templateFile -Value 'version 2' -Encoding UTF8 -Force
+                if (Test-Path $zipPath) {
+                    Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue
+                }
+                [System.IO.Compression.ZipFile]::CreateFromDirectory($templateSource, $zipPath)
+
+                $redeployFailed = $false
+                try {
+                    Use-Template -Alias $alias -DestinationPath $outputDir -ErrorAction Stop | Out-Null
+                } catch {
+                    $redeployFailed = $true
+                }
+                Assert-True -Condition $redeployFailed -Message 'Template redeployment without -Force fails when destination contains files'
+
+                Use-Template -Alias $alias -DestinationPath $outputDir -Force -ErrorAction Stop | Out-Null
+                $updatedContent = Get-Content -Path (Join-Path $outputDir 'hello.txt') -Raw -ErrorAction Stop
+                Assert-Equal -Expected 'version 2' -Actual ($updatedContent.Trim()) -Message 'Template redeployment with -Force overwrites files'
+            } catch {
+                Assert-True -Condition $false -Message "Templater redeployment regression test failed: $($_.Exception.Message)"
+            }
+
+            # 7-Zip hash validation tests
+            $sevenZipTestDir = Join-Path $templaterTestRoot 'SevenZip'
+            if (Test-Path $sevenZipTestDir) {
+                Remove-Item -Path $sevenZipTestDir -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            New-Item -ItemType Directory -Path $sevenZipTestDir -Force | Out-Null
+
+            $fakeSevenZip = Join-Path $sevenZipTestDir '7z.exe'
+            [System.IO.File]::WriteAllBytes($fakeSevenZip, [byte[]](0..63))
+            $expectedSevenZipHash = (Get-FileHash -Path $fakeSevenZip -Algorithm SHA256 -ErrorAction Stop).Hash
+            $normalizedSevenZipPath = (Resolve-Path $fakeSevenZip -ErrorAction Stop).Path
+
+            $env:POWERSHELLMAGIC_7ZIP_PATH = $fakeSevenZip
+            $env:POWERSHELLMAGIC_7ZIP_HASH = $expectedSevenZipHash
+
+            $templaterModule = Get-Module Templater
+            $resetSevenZipState = {
+                $script:Trusted7ZipPath = $null
+                $script:SevenZipHashCache = @{}
+                $script:SevenZipWarningEmitted = $false
+            }
+
+            $null = $templaterModule.Invoke($resetSevenZipState)
+            $trustedCandidate = $templaterModule.Invoke({ Get-Trusted7ZipExecutable }) | Select-Object -First 1
+            if ($trustedCandidate) {
+                $trustedCandidate = $trustedCandidate.ToString()
+            }
+            Assert-Equal -Expected $normalizedSevenZipPath -Actual $trustedCandidate -Message '7-Zip hash override accepts executable'
+
+            $null = $templaterModule.Invoke($resetSevenZipState)
+            $env:POWERSHELLMAGIC_7ZIP_HASH = '0000000000000000000000000000000000000000000000000000000000000000'
+
+            $rejectedCandidate = $templaterModule.Invoke({ Get-Trusted7ZipExecutable }) | Select-Object -First 1
+            if ($rejectedCandidate) {
+                $rejectedCandidate = $rejectedCandidate.ToString()
+            }
+            $cachedPath = $templaterModule.Invoke({ $script:Trusted7ZipPath }) | Select-Object -First 1
+            Assert-True -Condition (($cachedPath -ne $normalizedSevenZipPath) -and ($rejectedCandidate -ne $normalizedSevenZipPath)) -Message 'Hash mismatch rejects custom 7-Zip executable'
+
+            # Verify dependency updater synchronises hashes and URLs
+            $updateTestRoot = Join-Path $templaterTestRoot 'DependencyUpdate'
+            if (Test-Path $updateTestRoot) {
+                Remove-Item -Path $updateTestRoot -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            New-Item -ItemType Directory -Path (Join-Path $updateTestRoot 'Modules\Templater') -Force | Out-Null
+            New-Item -ItemType Directory -Path (Join-Path $updateTestRoot 'Scripts') -Force | Out-Null
+
+            Copy-Item -Path (Join-Path $PSScriptRoot '..\Setup-PowerShellMagic.ps1') -Destination $updateTestRoot -Force
+            Copy-Item -Path (Join-Path $PSScriptRoot '..\Modules\Templater\Templater.psm1') -Destination (Join-Path $updateTestRoot 'Modules\Templater') -Force
+            Copy-Item -Path (Join-Path $PSScriptRoot '..\Scripts\Update-Dependencies.ps1') -Destination (Join-Path $updateTestRoot 'Scripts') -Force
+
+            $scriptCopyPath = Join-Path $updateTestRoot 'Scripts\Update-Dependencies.ps1'
+            $setupCopyPath = Join-Path $updateTestRoot 'Setup-PowerShellMagic.ps1'
+            $templaterCopyPath = Join-Path $updateTestRoot 'Modules\Templater\Templater.psm1'
+
+            $setupCopyContent = Get-Content -Path $setupCopyPath -Raw
+            $currentUrlMatch = [regex]::Match($setupCopyContent, "'7zip'\s*=\s*@\{.*?PortableUrl\s*=\s*'([^']+)'", [System.Text.RegularExpressions.RegexOptions]::Singleline)
+            $currentHashMatch = [regex]::Match($setupCopyContent, "'7zip'\s*=\s*@\{.*?PortableSHA256\s*=\s*'([^']+)'", [System.Text.RegularExpressions.RegexOptions]::Singleline)
+
+            if (-not ($currentUrlMatch.Success -and $currentHashMatch.Success)) {
+                Assert-True -Condition $false -Message 'Dependency updater test could not locate 7-Zip metadata in setup script copy'
+            } else {
+                $currentPortableUrl = $currentUrlMatch.Groups[1].Value
+                $currentPortableHash = $currentHashMatch.Groups[1].Value
+                $newPortableUrl = "$currentPortableUrl?updated=1"
+                $newPortableHash = '0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF'
+
+                & {
+                    param($scriptPath, $updates)
+                    . $scriptPath
+                    Update-SetupScript -Updates $updates
+                } -scriptPath $scriptCopyPath -updates @{
+                    '7zip' = @{
+                        Name = '7-Zip'
+                        CurrentVersion = 'current'
+                        LatestVersion = 'latest'
+                        CurrentUrl = $currentPortableUrl
+                        NewUrl = $newPortableUrl
+                        CurrentHash = $currentPortableHash
+                        NewHash = $newPortableHash
+                    }
+                }
+
+                $postUpdateSetup = Get-Content -Path $setupCopyPath -Raw
+                $postUpdateTemplater = Get-Content -Path $templaterCopyPath -Raw
+
+                Assert-True -Condition ($postUpdateSetup -match [regex]::Escape($newPortableUrl)) -Message 'Dependency updater writes new 7-Zip URL to setup script copy'
+                Assert-True -Condition ($postUpdateSetup -match [regex]::Escape($newPortableHash)) -Message 'Dependency updater writes new 7-Zip hash to setup script copy'
+                Assert-True -Condition ($postUpdateSetup -notmatch [regex]::Escape($currentPortableHash)) -Message 'Dependency updater removes old 7-Zip hash from setup script copy'
+                Assert-True -Condition ($postUpdateTemplater -match [regex]::Escape("$newPortableHash'")) -Message 'Dependency updater synchronises managed 7-Zip hash in templater module copy'
+
+                $githubFallback = & {
+                    param($scriptPath)
+                    . $scriptPath
+
+                    Set-Variable -Name RestHeadersCapture -Scope Script -Value $null
+                    Set-Variable -Name WebHeadersCapture -Scope Script -Value $null
+
+                    Set-DependencyHttpInvoker -RestMethod {
+                        param($parameters)
+                        Set-Variable -Name RestHeadersCapture -Scope Script -Value $parameters.Headers
+                        throw (New-Object System.Net.WebException('Simulated GitHub API failure'))
+                    } -WebRequest {
+                        param($parameters)
+                        Set-Variable -Name WebHeadersCapture -Scope Script -Value $parameters.Headers
+                        return [pscustomobject]@{
+                            BaseResponse = [pscustomobject]@{
+                                ResponseUri = [Uri]'https://github.com/junegunn/fzf/releases/tag/v9.9.9'
+                            }
+                            Content = '<html></html>'
+                        }
+                    }
+
+                    $tag = Get-GitHubLatestReleaseTag -Repository 'junegunn/fzf'
+                    $restHeaders = Get-Variable -Name RestHeadersCapture -Scope Script -ValueOnly -ErrorAction SilentlyContinue
+                    $webHeaders = Get-Variable -Name WebHeadersCapture -Scope Script -ValueOnly -ErrorAction SilentlyContinue
+                    Set-DependencyHttpInvoker -Reset
+
+                    [pscustomobject]@{
+                        Tag = $tag
+                        RestHeaders = $restHeaders
+                        WebHeaders = $webHeaders
+                    }
+                } -scriptPath $scriptCopyPath
+
+                Assert-Equal -Expected 'v9.9.9' -Actual $githubFallback.Tag -Message 'GitHub fallback returns tag from redirect'
+                Assert-True -Condition ($githubFallback.RestHeaders['User-Agent']) -Message 'GitHub API request sets user agent header'
+                Assert-Equal -Expected 'application/vnd.github+json' -Actual $githubFallback.RestHeaders['Accept'] -Message 'GitHub API request sets Accept header'
+                Assert-True -Condition ($githubFallback.WebHeaders['User-Agent']) -Message 'GitHub fallback web request sets user agent header'
+                Assert-True -Condition ($githubFallback.WebHeaders['Accept'] -like 'text/html*') -Message 'GitHub fallback web request includes HTML accept header'
+
+                $sevenZipFallback = & {
+                    param($scriptPath)
+                    . $scriptPath
+
+                    Set-Variable -Name WebCallCountCapture -Scope Script -Value 0
+
+                    Set-DependencyHttpInvoker -WebRequest {
+                        param($parameters)
+                        $count = Get-Variable -Name WebCallCountCapture -Scope Script -ValueOnly -ErrorAction SilentlyContinue
+                        $count++
+                        Set-Variable -Name WebCallCountCapture -Scope Script -Value $count
+
+                        if ($count -eq 1) {
+                            throw (New-Object System.Net.WebException('Primary 7-Zip metadata failure'))
+                        }
+
+                        return [pscustomobject]@{
+                            Content = '<html><a href="a/7z9999-x64.exe">download</a></html>'
+                            BaseResponse = [pscustomobject]@{
+                                ResponseUri = [Uri]'https://www.7-zip.org/a/7z9999-x64.exe'
+                            }
+                        }
+                    }
+
+                    $latest = & $DependencyUpdaters['7zip'].GetLatestVersion
+                    $callCount = Get-Variable -Name WebCallCountCapture -Scope Script -ValueOnly -ErrorAction SilentlyContinue
+                    Set-DependencyHttpInvoker -Reset
+
+                    [pscustomobject]@{
+                        Version = $latest
+                        CallCount = $callCount
+                    }
+                } -scriptPath $scriptCopyPath
+
+                Assert-Equal -Expected '9999' -Actual $sevenZipFallback.Version -Message '7-Zip fallback parses version from alternate metadata source'
+                Assert-True -Condition ($sevenZipFallback.CallCount -ge 2) -Message '7-Zip fallback attempts secondary source after failure'
+            }
+        } finally {
+            if ($null -ne $previousXdg) {
+                $env:XDG_CONFIG_HOME = $previousXdg
+            } else {
+                Remove-Item -Path Env:\XDG_CONFIG_HOME -ErrorAction SilentlyContinue
+            }
+
+            Remove-Item -Path Env:\POWERSHELLMAGIC_7ZIP_PATH -ErrorAction SilentlyContinue
+            Remove-Item -Path Env:\POWERSHELLMAGIC_7ZIP_HASH -ErrorAction SilentlyContinue
+
+            if (Test-Path $templaterTestRoot) {
+                Remove-Item -Path $templaterTestRoot -Recurse -Force -ErrorAction SilentlyContinue
+            }
+
+            Remove-Module Templater -Force -ErrorAction SilentlyContinue
+        }
 
         # Restore original execution policy
         if ($originalExecutionPolicy) {
@@ -443,40 +701,116 @@ function Test-Unitea {
         $modulePath = Join-Path $PSScriptRoot '..\Modules\Unitea'
         Import-Module $modulePath -Force
 
-        # Test core commands exist
-        $expectedCommands = @(
-            'Open-UnityProject',
-            'Add-UnityProject',
-            'Get-UnityProjects',
-            'Remove-UnityProject'
-        )
-
-        foreach ($cmd in $expectedCommands) {
-            $command = Get-Command $cmd -ErrorAction SilentlyContinue
-            Assert-NotNull -Value $command -Message "Command $cmd exists"
+        $uniteaTestRoot = Join-Path $PSScriptRoot '..\TestArtifacts\Unitea'
+        if (Test-Path $uniteaTestRoot) {
+            Remove-Item -Path $uniteaTestRoot -Recurse -Force -ErrorAction SilentlyContinue
         }
+        New-Item -ItemType Directory -Path $uniteaTestRoot -Force | Out-Null
 
-        # Test configuration functions
-        $configFunc = Get-Command 'Get-UnityConfigPath' -ErrorAction SilentlyContinue
-        if ($configFunc) {
-            try {
-                $configPath = Get-UnityConfigPath
-                Assert-NotNull -Value $configPath -Message 'Unity config path function returns value'
-            } catch {
-                Write-TestWarning "Unity config path function error: $($_.Exception.Message)"
-            }
-        }
+        $previousXdg = $env:XDG_CONFIG_HOME
+        $env:XDG_CONFIG_HOME = $uniteaTestRoot
 
-        # Test without Unity Hub
         try {
-            $projects = Get-UnityProjects -ErrorAction SilentlyContinue
-            Write-TestInfo 'Unitea handles missing Unity Hub gracefully'
-            $Script:TestResults.Passed++
-        } catch {
-            Write-TestWarning "Unitea Unity Hub handling: $($_.Exception.Message)"
-        }
+            # Test core commands exist
+            $expectedCommands = @(
+                'Open-UnityProject',
+                'Add-UnityProject',
+                'Get-UnityProjects',
+                'Remove-UnityProject'
+            )
 
-        Remove-Module Unitea -Force -ErrorAction SilentlyContinue
+            foreach ($cmd in $expectedCommands) {
+                $command = Get-Command $cmd -ErrorAction SilentlyContinue
+                Assert-NotNull -Value $command -Message "Command $cmd exists"
+            }
+
+            # Test configuration functions
+            $configFunc = Get-Command 'Get-UnityConfigPath' -ErrorAction SilentlyContinue
+            if ($configFunc) {
+                try {
+                    $configPath = Get-UnityConfigPath
+                    Assert-NotNull -Value $configPath -Message 'Unity config path function returns value'
+                    if ($configPath) {
+                        $normalizedRoot = [System.IO.Path]::GetFullPath($uniteaTestRoot)
+                        $normalizedConfig = [System.IO.Path]::GetFullPath($configPath)
+                        $comparisonType = if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+                            [System.StringComparison]::OrdinalIgnoreCase
+                        } else {
+                            [System.StringComparison]::Ordinal
+                        }
+                        Assert-True -Condition ($normalizedConfig.StartsWith($normalizedRoot, $comparisonType)) -Message 'Unity config path respects XDG override'
+                    }
+                } catch {
+                    Write-TestWarning "Unity config path function error: $($_.Exception.Message)"
+                }
+            }
+
+            # Prepare sample Unity project
+            $workspaceRoot = Join-Path $uniteaTestRoot 'Workspace'
+            New-Item -ItemType Directory -Path $workspaceRoot -Force | Out-Null
+
+            $sampleProjectPath = Join-Path $workspaceRoot 'SampleProject'
+            New-Item -ItemType Directory -Path $sampleProjectPath -Force | Out-Null
+            $projectSettings = Join-Path $sampleProjectPath 'ProjectSettings'
+            New-Item -ItemType Directory -Path $projectSettings -Force | Out-Null
+            $versionFile = Join-Path $projectSettings 'ProjectVersion.txt'
+            Set-Content -Path $versionFile -Value 'm_EditorVersion: 2021.3.12f1' -Encoding UTF8
+
+            $resolvedProjectPath = (Resolve-Path $sampleProjectPath).Path
+            $alias = "unitea-test-$([System.Guid]::NewGuid().ToString('N').Substring(0, 8))"
+
+            Add-UnityProject -Alias $alias -ProjectPath $sampleProjectPath -Force -ErrorAction Stop
+
+            # Validate structured project listing
+            $projects = @(Get-UnityProjects -ErrorAction Stop)
+            Assert-True -Condition ($projects.Count -ge 1) -Message 'Get-UnityProjects returns project records'
+            $aliasRecord = $projects | Where-Object { $_.Alias -eq $alias } | Select-Object -First 1
+            Assert-NotNull -Value $aliasRecord -Message 'Project listing contains the added alias'
+            Assert-Equal -Expected $resolvedProjectPath -Actual $aliasRecord.Path -Message 'Returned record path matches project location'
+
+            $pathResult = Get-UnityProjects -Alias $alias -Path
+            Assert-Equal -Expected $resolvedProjectPath -Actual $pathResult -Message 'Get-UnityProjects -Alias -Path returns project path'
+
+            # Simulate corrupt JSON and verify recovery
+            $configPath = Get-UnityConfigPath
+            Set-Content -Path $configPath -Value '{ invalid json' -Encoding UTF8
+
+            $recoveredProjects = @(Get-UnityProjects -ErrorAction SilentlyContinue)
+            Assert-True -Condition ($recoveredProjects.Count -eq 0) -Message 'Corrupt Unity configuration resets to empty project list'
+
+            $backupFiles = Get-ChildItem -Path ("$configPath.backup.*") -ErrorAction SilentlyContinue
+            Assert-True -Condition ($backupFiles.Count -ge 1) -Message 'Backup created when recovering corrupt Unity configuration'
+
+            try {
+                $resetContent = Get-Content -Path $configPath -Raw -ErrorAction Stop | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+                Assert-True -Condition ($resetContent.Count -eq 0) -Message 'Recovered Unity configuration serializes to empty object'
+            } catch {
+                Assert-True -Condition $false -Message "Recovered Unity configuration is unreadable: $($_.Exception.Message)"
+            }
+
+            # Test without Unity Hub
+            try {
+                $projectsListing = Get-UnityProjects -ErrorAction SilentlyContinue
+                if ($projectsListing -eq $null -or $projectsListing.Count -eq 0) {
+                    Write-TestInfo 'Unitea handles missing projects gracefully after recovery'
+                    $Script:TestResults.Passed++
+                }
+            } catch {
+                Write-TestWarning "Unitea Unity Hub handling: $($_.Exception.Message)"
+            }
+        } finally {
+            if ($null -ne $previousXdg) {
+                $env:XDG_CONFIG_HOME = $previousXdg
+            } else {
+                Remove-Item -Path Env:\XDG_CONFIG_HOME -ErrorAction SilentlyContinue
+            }
+
+            if (Test-Path $uniteaTestRoot) {
+                Remove-Item -Path $uniteaTestRoot -Recurse -Force -ErrorAction SilentlyContinue
+            }
+
+            Remove-Module Unitea -Force -ErrorAction SilentlyContinue
+        }
 
         # Restore original execution policy
         if ($originalExecutionPolicy) {
@@ -592,10 +926,12 @@ function Main {
 
 # Store the original location
 $originalLocation = Get-Location
+$originalProgressPreference = $ProgressPreference
 
 try {
     # Change to script directory for relative paths
     Set-Location $PSScriptRoot
+    $ProgressPreference = 'SilentlyContinue'
 
     # Run tests and get exit code
     $exitCode = Main
@@ -607,6 +943,7 @@ try {
     Write-TestFailure ('Test suite failed: ' + $_.Exception.Message)
     exit 1
 } finally {
+    $ProgressPreference = $originalProgressPreference
     # Restore original location
     Set-Location $originalLocation
 }
