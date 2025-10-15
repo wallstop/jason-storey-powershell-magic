@@ -1061,53 +1061,62 @@ function Use-Template {
                     Write-Host 'Template extracted successfully!' -ForegroundColor Green
                 }
                 'Folder' {
-                    # Copy folder contents
-                    $items = Get-ChildItem -Path $template.Path -Recurse
-                    $totalItems = $items.Count
-                    $copiedItems = 0
+                    # Copy folder contents with accurate progress tracking
+                    $allItems = Get-ChildItem -Path $template.Path -Recurse -Force
+                    $directories = @($allItems | Where-Object { $_.PSIsContainer })
+                    $files = @($allItems | Where-Object { -not $_.PSIsContainer })
 
-                    Write-Host "Copying $totalItems items..." -ForegroundColor Gray
-
-                    foreach ($item in $items) {
-                        $relativePath = $item.FullName.Substring($template.Path.Length + 1)
-                        $destPath = Join-Path $finalDestination $relativePath
-
-                        if ($item.PSIsContainer) {
-                            if (-not (Test-Path $destPath)) {
-                                New-Item -ItemType Directory -Path $destPath -Force | Out-Null
-                            }
-                        } else {
-                            $destDir = Split-Path $destPath -Parent
-                            if (-not (Test-Path $destDir)) {
-                                New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-                            }
-
-                            if ((Test-Path $destPath) -and -not $Force) {
-                                $choice = Read-Host "File exists: $relativePath. Overwrite? (y/N/a for all)"
-                                if ($choice -match '^[Aa]') {
-                                    $Force = $true
-                                } elseif ($choice -notmatch '^[Yy]') {
-                                    Write-Host "Skipping: $relativePath" -ForegroundColor Yellow
-                                    continue
-                                }
-                            }
-
-                            try {
-                                Copy-Item -Path $item.FullName -Destination $destPath -Force:$Force
-                                $copiedItems++
-
-                                # Show progress for large operations
-                                if ($totalItems -gt 50 -and ($copiedItems % 10) -eq 0) {
-                                    $percent = [math]::Round(($copiedItems / $totalItems) * 100)
-                                    Write-Host "Progress: $copiedItems/$totalItems ($percent%)" -ForegroundColor Gray
-                                }
-                            } catch {
-                                Write-Warning "Failed to copy: $relativePath - $($_.Exception.Message)"
-                            }
+                    foreach ($directory in $directories) {
+                        $relativeDir = $directory.FullName.Substring($template.Path.Length + 1)
+                        $destDirPath = Join-Path $finalDestination $relativeDir
+                        if (-not (Test-Path $destDirPath)) {
+                            New-Item -ItemType Directory -Path $destDirPath -Force | Out-Null
                         }
                     }
 
-                    Write-Host "Template copied successfully! ($copiedItems items)" -ForegroundColor Green
+                    $totalFiles = $files.Count
+                    $copiedFiles = 0
+
+                    if ($totalFiles -gt 0) {
+                        Write-Host "Copying $totalFiles files..." -ForegroundColor Gray
+                    } else {
+                        Write-Host 'No files found to copy (only directory structure).' -ForegroundColor Yellow
+                    }
+
+                    foreach ($file in $files) {
+                        $relativePath = $file.FullName.Substring($template.Path.Length + 1)
+                        $destPath = Join-Path $finalDestination $relativePath
+
+                        $destDir = Split-Path $destPath -Parent
+                        if (-not (Test-Path $destDir)) {
+                            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+                        }
+
+                        if ((Test-Path $destPath) -and -not $Force) {
+                            $choice = Read-Host "File exists: $relativePath. Overwrite? (y/N/a for all)"
+                            if ($choice -match '^[Aa]') {
+                                $Force = $true
+                            } elseif ($choice -notmatch '^[Yy]') {
+                                Write-Host "Skipping: $relativePath" -ForegroundColor Yellow
+                                continue
+                            }
+                        }
+
+                        try {
+                            Copy-Item -Path $file.FullName -Destination $destPath -Force:$Force
+                            $copiedFiles++
+
+                            # Show progress for large operations
+                            if ($totalFiles -gt 50 -and ($copiedFiles % 10) -eq 0) {
+                                $percent = [math]::Round(($copiedFiles / $totalFiles) * 100)
+                                Write-Host "Progress: $copiedFiles/$totalFiles ($percent%)" -ForegroundColor Gray
+                            }
+                        } catch {
+                            Write-Warning "Failed to copy: $relativePath - $($_.Exception.Message)"
+                        }
+                    }
+
+                    Write-Host "Template copied successfully! ($copiedFiles files, $($directories.Count) directories)" -ForegroundColor Green
                 }
             }
 

@@ -926,10 +926,12 @@ function Main {
 
 # Store the original location
 $originalLocation = Get-Location
+$originalProgressPreference = $ProgressPreference
 
 try {
     # Change to script directory for relative paths
     Set-Location $PSScriptRoot
+    $ProgressPreference = 'SilentlyContinue'
 
     # Run tests and get exit code
     $exitCode = Main
@@ -941,6 +943,7 @@ try {
     Write-TestFailure ('Test suite failed: ' + $_.Exception.Message)
     exit 1
 } finally {
+    $ProgressPreference = $originalProgressPreference
     # Restore original location
     Set-Location $originalLocation
 }

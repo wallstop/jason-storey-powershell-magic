@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 
 <#
 .SYNOPSIS
@@ -807,6 +807,5 @@ function Main {
 
 # Run main function
 Main
-
 
 
