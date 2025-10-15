@@ -23,6 +23,9 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
+    defaults:
+      run:
+        shell: pwsh
 
     steps:
     - name: Checkout repository
@@ -31,13 +34,13 @@ jobs:
         fetch-depth: 0
 
     - name: Setup PowerShell
-      shell: powershell
+      shell: pwsh
       run: |
         Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
         Write-Host "OS Version: $($PSVersionTable.OS)"
 
     - name: Run all tests before release
-      shell: powershell
+      shell: pwsh
       run: |
         Write-Host "Running comprehensive test suite before release..." -ForegroundColor Cyan
         .\Run-Tests.ps1 -CI
@@ -49,7 +52,7 @@ jobs:
 
     - name: Calculate new version
       id: version
-      shell: powershell
+      shell: pwsh
       run: |
         # Read current version
         $currentVersion = Get-Content .\version.txt -Raw | ForEach-Object { $_.Trim() }
@@ -89,14 +92,14 @@ jobs:
         echo "CURRENT_VERSION=$currentVersion" >> $env:GITHUB_OUTPUT
 
     - name: Update version file
-      shell: powershell
+      shell: pwsh
       run: |
         $newVersion = '${{ steps.version.outputs.NEW_VERSION }}'
         $newVersion | Out-File -FilePath .\version.txt -Encoding utf8 -NoNewline
         Write-Host "Updated version.txt to: $newVersion"
 
     - name: Create release archive
-      shell: powershell
+      shell: pwsh
       run: |
         $version = '${{ steps.version.outputs.NEW_VERSION }}'
         $archiveName = "powershell-magic-v$version.zip"
@@ -156,7 +159,7 @@ jobs:
 
     - name: Generate changelog
       id: changelog
-      shell: powershell
+      shell: pwsh
       run: |
         $currentVersion = '${{ steps.version.outputs.CURRENT_VERSION }}'
         $newVersion = '${{ steps.version.outputs.NEW_VERSION }}'
@@ -219,7 +222,7 @@ jobs:
         echo "CHANGELOG=$escapedChangelog" >> $env:GITHUB_OUTPUT
 
     - name: Commit version bump
-      shell: powershell
+      shell: pwsh
       run: |
         $newVersion = '${{ steps.version.outputs.NEW_VERSION }}'
 
@@ -236,7 +239,7 @@ jobs:
         Write-Host "Committed version bump to v$newVersion"
 
     - name: Create and push tag
-      shell: powershell
+      shell: pwsh
       run: |
         $newVersion = '${{ steps.version.outputs.NEW_VERSION }}'
         $tagName = "v$newVersion"
@@ -261,7 +264,7 @@ jobs:
         generate_release_notes: false
 
     - name: Release Summary
-      shell: powershell
+      shell: pwsh
       run: |
         $version = '${{ steps.version.outputs.NEW_VERSION }}'
         $archiveName = '${{ steps.create-release.outputs.ARCHIVE_NAME }}'
