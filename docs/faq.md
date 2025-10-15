@@ -356,8 +356,10 @@ Restart PowerShell after installing.
 - **Manual:** download binaries from <https://www.7-zip.org/> (ships `7z.exe`
   for Windows and `7zz` for macOS/Linux)
 
-> Verify manual downloads with `Get-FileHash` or `shasum -a 256`, comparing the
-> result to the SHA256 values in the README manual portable downloads table.
+> Verify manual downloads by running
+> `pwsh ./Setup-PowerShellMagic.ps1 -ListPortableDownloads` to view the official
+> URLs and SHA256 hashes, then confirm with `Get-FileHash` or `shasum -a 256`
+> before installing.
 
 ### Can I use without a package manager?
 

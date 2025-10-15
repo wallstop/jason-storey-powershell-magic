@@ -152,6 +152,41 @@ function Test-FileHash {
     }
 }
 
+function Get-TemplaterManagedSevenZipHashes {
+    $modulePath = Join-Path $PSScriptRoot '..\Modules\Templater\Templater.psm1'
+
+    if (-not (Test-Path $modulePath)) {
+        Write-TestFailure "Templater module not found: $modulePath"
+        return @{}
+    }
+
+    try {
+        $content = Get-Content -Path $modulePath -Raw
+        $regex = [System.Text.RegularExpressions.Regex]::Match(
+            $content,
+            '\$script:ManagedSevenZipHashes\s*=\s*@\{(?<body>.*?)\}',
+            [System.Text.RegularExpressions.RegexOptions]::Singleline
+        )
+
+        if (-not $regex.Success) {
+            Write-TestFailure 'Failed to locate ManagedSevenZipHashes in Templater module'
+            return @{}
+        }
+
+        $hashes = @{}
+        foreach ($line in ($regex.Groups['body'].Value -split "`n")) {
+            if ($line -match "^\s*(\w+)\s*=\s*'([A-Fa-f0-9]{64})'") {
+                $hashes[$matches[1]] = $matches[2].ToUpper()
+            }
+        }
+
+        return $hashes
+    } catch {
+        Write-TestFailure "Failed to parse Templater managed hashes: $($_.Exception.Message)"
+        return @{}
+    }
+}
+
 function Download-File {
     param(
         [string]$Url,
@@ -265,10 +300,59 @@ function Test-DependencyConfiguration {
         }
 
         Write-TestInfo "Found $portableCount dependencies with portable assets for $script:CurrentPlatformKey"
+
+        if ($Dependencies.ContainsKey('7zip')) {
+            $templaterHashes = Get-TemplaterManagedSevenZipHashes
+
+            if ($templaterHashes.Count -gt 0) {
+                Write-TestInfo 'Validating Templater managed 7-Zip hashes align with setup script'
+                foreach ($platform in $templaterHashes.Keys) {
+                    Assert-True -Condition ($Dependencies['7zip'].PortableAssets.ContainsKey($platform)) `
+                        -Message "Setup defines 7-Zip portable asset for $platform"
+
+                    if ($Dependencies['7zip'].PortableAssets.ContainsKey($platform)) {
+                        $assetHash = $Dependencies['7zip'].PortableAssets[$platform].Sha256
+                        Assert-Equal -Expected $assetHash.ToUpper() -Actual $templaterHashes[$platform] `
+                            -Message "7-Zip $platform hash matches Templater managed hash"
+                    }
+                }
+            } else {
+                Write-TestWarning 'Skipped Templater managed hash validation (no hashes found)'
+            }
+        } else {
+            Write-TestWarning 'Skipped Templater managed hash validation (7-Zip dependency missing)'
+        }
+
         return $true
 
     } catch {
         Write-TestFailure "Failed to load dependencies configuration: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Test-PortableManifestExport {
+    Write-Host "`n=== Testing Portable Manifest Export ===" -ForegroundColor Yellow
+
+    $setupPath = Join-Path $PSScriptRoot '..\Setup-PowerShellMagic.ps1'
+
+    if (-not (Test-Path $setupPath)) {
+        Write-TestFailure "Setup script not found: $setupPath"
+        return $false
+    }
+
+    try {
+        $output = & $setupPath -ListPortableDownloads
+
+        $outputText = ($output | Out-String)
+        Assert-True -Condition ($outputText -match '7-Zip') `
+            -Message 'Manifest includes 7-Zip entry'
+        Assert-True -Condition ($outputText -match 'SHA256') `
+            -Message 'Manifest prints SHA256 values'
+
+        return $true
+    } catch {
+        Write-TestFailure "Portable manifest export failed: $($_.Exception.Message)"
         return $false
     }
 }
@@ -432,6 +516,9 @@ function Main {
     $configValid = Test-DependencyConfiguration
 
     if ($configValid) {
+        # Ensure manifest export stays in sync with setup metadata
+        $null = Test-PortableManifestExport
+
         # Test actual downloads and hash validation
         Test-PortableDownloads
     } else {
@@ -461,6 +548,7 @@ try {
     # Restore original location
     Set-Location $originalLocation
 }
+
 
 
 

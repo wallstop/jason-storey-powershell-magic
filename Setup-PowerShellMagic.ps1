@@ -35,6 +35,9 @@ Run in non-interactive mode, automatically answering prompts without waiting for
 .PARAMETER AssumeYes
 When combined with -NonInteractive, automatically answer 'y' to confirmation prompts.
 
+.PARAMETER ListPortableDownloads
+Print a manifest of portable download URLs and SHA256 hashes, then exit.
+
 .EXAMPLE
 .\Setup-PowerShellMagic.ps1
 Full automated setup with prompts
@@ -54,6 +57,10 @@ Run setup without any user prompts (for testing)
 .EXAMPLE
 .\Setup-PowerShellMagic.ps1 -NonInteractive -AssumeYes
 Run setup without prompts, auto-confirming all questions (for CI)
+
+.EXAMPLE
+.\Setup-PowerShellMagic.ps1 -ListPortableDownloads
+Display portable download URLs and hashes without running setup
 #>
 
 [CmdletBinding()]
@@ -63,7 +70,8 @@ param(
     [switch]$Force,
     [string]$InstallLocation,
     [switch]$NonInteractive,
-    [switch]$AssumeYes
+    [switch]$AssumeYes,
+    [switch]$ListPortableDownloads
 )
 
 $script:CurrentPlatform = if ($IsWindows) {
@@ -332,6 +340,58 @@ $Dependencies = @{
             Pacman = 'Arch package (requires sudo privileges)'
         }
     }
+}
+
+function Show-PortableDownloads {
+    Write-Host 'PowerShell Magic Portable Downloads Manifest' -ForegroundColor Cyan
+
+    $portableDependencies = $Dependencies.GetEnumerator() |
+        Where-Object { $_.Value.PortableAssets } |
+        Sort-Object Name
+    $manifest = @()
+
+    foreach ($entry in $portableDependencies) {
+        $dependency = $entry.Value
+        Write-Host "`n$($dependency.Name)" -ForegroundColor Yellow
+
+        foreach ($platform in ($dependency.PortableAssets.Keys | Sort-Object)) {
+            $asset = $dependency.PortableAssets[$platform]
+
+            Write-Host ('  [{0}] URL: {1}' -f $platform, $asset.Url) -ForegroundColor Gray
+
+            if ($asset.Sha256) {
+                Write-Host ('  [{0}] SHA256: {1}' -f $platform, $asset.Sha256) `
+                    -ForegroundColor Gray
+            } else {
+                Write-WarningMessage ('[{0}] SHA256 not available' -f $platform)
+            }
+
+            if ($asset.Executable) {
+                Write-Host ('  [{0}] Executable: {1}' -f $platform, $asset.Executable) `
+                    -ForegroundColor DarkGray
+            }
+
+            if ($asset.ArchiveType) {
+                Write-Host ('  [{0}] Archive Type: {1}' -f $platform, $asset.ArchiveType) `
+                    -ForegroundColor DarkGray
+            }
+
+            $manifest += [PSCustomObject]@{
+                Name = $dependency.Name
+                Platform = $platform
+                Url = $asset.Url
+                Sha256 = $asset.Sha256
+                Executable = $asset.Executable
+                ArchiveType = $asset.ArchiveType
+            }
+        }
+    }
+
+    Write-Host "`nValidate downloads with Get-FileHash -Algorithm SHA256" `
+        -ForegroundColor Cyan
+    Write-Host 'or shasum -a 256 before installing.' -ForegroundColor Cyan
+
+    return $manifest
 }
 
 function Test-IsElevated {
@@ -1215,5 +1275,9 @@ function Main {
     Show-Summary $results
 }
 
-# Run main function
-Main
+# Run main function or manifest export
+if ($ListPortableDownloads) {
+    Show-PortableDownloads
+} else {
+    Main
+}

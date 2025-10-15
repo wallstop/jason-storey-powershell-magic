@@ -72,6 +72,53 @@ function Write-ScriptError {
     Write-Host "[ERROR] $Message" -ForegroundColor Red
 }
 
+$script:PreferredLineEnding = [Environment]::NewLine
+
+function Get-LineEndingReport {
+    param([string]$Text)
+
+    if ($null -eq $Text) {
+        return [PSCustomObject]@{
+            HasCRLF = $false
+            HasLF = $false
+            HasCR = $false
+            IsMixed = $false
+        }
+    }
+
+    $hasCRLF = $Text -match "`r`n"
+    $hasLF = $Text -match "(?<!`r)`n"
+    $hasCR = $Text -match "`r(?!`n)"
+    $activeTypes = @($hasCRLF, $hasLF, $hasCR) | Where-Object { $_ }
+
+    return [PSCustomObject]@{
+        HasCRLF = $hasCRLF
+        HasLF = $hasLF
+        HasCR = $hasCR
+        IsMixed = ($activeTypes.Count -gt 1)
+    }
+}
+
+function Normalize-LineEndings {
+    param(
+        [string]$Text,
+        [string]$NewLine = $script:PreferredLineEnding
+    )
+
+    if ($null -eq $Text) {
+        return $Text
+    }
+
+    $normalized = $Text -replace "`r`n", "`n"
+    $normalized = $normalized -replace "`r", "`n"
+
+    if ($NewLine -eq "`n") {
+        return $normalized
+    }
+
+    return $normalized -replace "`n", $NewLine
+}
+
 function Test-PSScriptAnalyzer {
     try {
         $module = Get-Module -Name PSScriptAnalyzer -ListAvailable
@@ -145,17 +192,27 @@ function Test-PowerShellFormatting {
     try {
         # Get the original content
         $originalContent = Get-Content -Path $FilePath -Raw
+        $lineInfo = Get-LineEndingReport -Text $originalContent
+
+        $contentForFormatting = if ($lineInfo.IsMixed) {
+            Normalize-LineEndings -Text $originalContent -NewLine "`n"
+        } else {
+            $originalContent
+        }
 
         # Apply formatting to see what would change
         if (Test-Path $settingsPath) {
-            $formatted = Invoke-Formatter -ScriptDefinition $originalContent -Settings $settingsPath
+            $formatted = Invoke-Formatter -ScriptDefinition $contentForFormatting -Settings $settingsPath
         } else {
             Write-ScriptWarning "Settings file not found: $settingsPath, using default formatting"
-            $formatted = Invoke-Formatter -ScriptDefinition $originalContent
+            $formatted = Invoke-Formatter -ScriptDefinition $contentForFormatting
         }
 
+        $normalizedOriginal = Normalize-LineEndings -Text $contentForFormatting -NewLine "`n"
+        $normalizedFormatted = Normalize-LineEndings -Text $formatted -NewLine "`n"
+
         # Check if there are formatting differences
-        if ($formatted -ne $originalContent) {
+        if ($lineInfo.IsMixed -or $normalizedFormatted -ne $normalizedOriginal) {
             # Create a pseudo-issue to indicate formatting is needed
             return @([PSCustomObject]@{
                     Line = 1
@@ -181,18 +238,28 @@ function Invoke-PowerShellFormatting {
     try {
         # Get the original content
         $originalContent = Get-Content -Path $FilePath -Raw
+        $lineInfo = Get-LineEndingReport -Text $originalContent
+
+        $contentForFormatting = if ($lineInfo.IsMixed) {
+            Normalize-LineEndings -Text $originalContent -NewLine "`n"
+        } else {
+            $originalContent
+        }
 
         # Apply formatting using PSScriptAnalyzer
         if (Test-Path $settingsPath) {
-            $formatted = Invoke-Formatter -ScriptDefinition $originalContent -Settings $settingsPath
+            $formatted = Invoke-Formatter -ScriptDefinition $contentForFormatting -Settings $settingsPath
         } else {
             Write-ScriptWarning "Settings file not found: $settingsPath, using default formatting"
-            $formatted = Invoke-Formatter -ScriptDefinition $originalContent
+            $formatted = Invoke-Formatter -ScriptDefinition $contentForFormatting
         }
 
-        # Only write if content changed
-        if ($formatted -ne $originalContent) {
-            Set-Content -Path $FilePath -Value $formatted -Encoding UTF8 -NoNewline
+        $normalizedOriginal = Normalize-LineEndings -Text $originalContent
+        $normalizedFormatted = Normalize-LineEndings -Text $formatted
+
+        # Only write if content changed or line endings need normalization
+        if ($lineInfo.IsMixed -or $normalizedFormatted -ne $normalizedOriginal) {
+            Set-Content -Path $FilePath -Value $normalizedFormatted -Encoding UTF8 -NoNewline
             return $true
         }
 

@@ -272,28 +272,15 @@ unity-remove mygame                  # Remove from list
 
 #### Manual portable downloads
 
-If you cannot use a package manager, download the official binaries below and
-verify the SHA256 checksum before installing:
-
-| Tool  | Platform | Download                       | SHA256 |
-|-------|----------|--------------------------------|--------|
-| 7-Zip | Windows  | [7z 25.01 x64][7zip-win]       | `78AFA2A1C773CAF3CF7EDF62F857D2A8A5DA55FB0FFF5DA416074C0D28B2B55F` |
-| 7-Zip | macOS    | [7z 25.01 macOS][7zip-mac]     | `26AA75BC262BB10BF0805617B95569C3035C2C590A99F7DB55C7E9607B2685E0` |
-| 7-Zip | Linux    | [7z 25.01 linux x64][7zip-linux] | `4CA3B7C6F2F67866B92622818B58233DC70367BE2F36B498EB0BDEAAA44B53F4` |
-| fzf   | Windows  | [fzf 0.66.0 win x64][fzf-win]  | `9D2A1BC6E38665D0A15D846703A2C9EF1F5FE2630A9F972F9832712709C18823` |
-| eza   | Windows  | [eza 0.23.4 win x64][eza-win]  | `05677FD7C2D1B69CE71DF53DB74C29F6331EA0B2BE5AA3A0FCE6976200EE06FC` |
-
-Use `Get-FileHash .\downloaded-file -Algorithm SHA256` (PowerShell) or
-`shasum -a 256 ./downloaded-file` (macOS/Linux) to confirm the checksum matches.
-The setup script, `Tests\Test-PortableDownloads.ps1`, and
-`Scripts\Update-Dependencies.ps1` all enforce the same values so CI/CD reports
-drift immediately.
-
-[7zip-win]: https://www.7-zip.org/a/7z2501-x64.exe
-[7zip-mac]: https://www.7-zip.org/a/7z2501-mac.tar.xz
-[7zip-linux]: https://www.7-zip.org/a/7z2501-linux-x64.tar.xz
-[fzf-win]: https://github.com/junegunn/fzf/releases/download/v0.66.0/fzf-0.66.0-windows_amd64.zip
-[eza-win]: https://github.com/eza-community/eza/releases/download/v0.23.4/eza.exe_x86_64-pc-windows-gnu.zip
+- Run `pwsh ./Setup-PowerShellMagic.ps1 -ListPortableDownloads` to print the
+  current portable download URLs and SHA256 hashes bundled with the setup
+  script. This output is the single source of truth for manual installs.
+- Validate any download with `Get-FileHash .\file -Algorithm SHA256`
+  (PowerShell) or `shasum -a 256 ./file` (macOS/Linux) before you trust it.
+- CI/CD pipelines use `Scripts\Update-Dependencies.ps1` and
+  `Tests\Test-PortableDownloads.ps1` to keep those hashes fresh; you can run
+  `pwsh ./Tests/Test-PortableDownloads.ps1 -SkipDownloads -Verbose` locally to
+  inspect the manifest without hitting the network.
 
 ### Installation Methods
 

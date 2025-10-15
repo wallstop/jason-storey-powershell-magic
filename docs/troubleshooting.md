@@ -244,8 +244,10 @@ Copy-Item $latest.FullName (Get-QuickJumpConfigPath) -Force
 - **Linux:** `sudo apt install p7zip-full`, `sudo dnf install p7zip`, or
   `sudo pacman -S p7zip`
 
-> Verify manual downloads with `Get-FileHash` or `shasum -a 256`, comparing the
-> result to the README table of SHA256 values before installing.
+> Verify manual downloads by running
+> `pwsh ./Setup-PowerShellMagic.ps1 -ListPortableDownloads` to view the official
+> URLs and SHA256 hashes, then confirm with `Get-FileHash` or `shasum -a 256`
+> before installing.
 
 #### Verify installation
 
@@ -563,8 +565,10 @@ Add-Content $PROFILE '$env:PATH += ";C:\Path\To\fzf"'
 - **Manual:** download direct binaries from <https://www.7-zip.org/> (ships
   `7z.exe` on Windows and `7zz` elsewhere)
 
-> Verify manual downloads with `Get-FileHash` or `shasum -a 256`, comparing the
-> result to the README table of SHA256 values before installing.
+> Verify manual downloads by running
+> `pwsh ./Setup-PowerShellMagic.ps1 -ListPortableDownloads` to view the official
+> URLs and SHA256 hashes, then confirm with `Get-FileHash` or `shasum -a 256`
+> before installing.
 
 #### Verification
 
