@@ -10,19 +10,25 @@ jobs:
   test:
     name: Test PowerShell Magic
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v5
 
+    - name: Install PowerShell 7
+      uses: PowerShell/actions-setup-pwsh@v2
+      with:
+        version: '7.4.x'
+
     - name: Setup PowerShell
-      shell: powershell
       run: |
         Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
         Write-Host "OS Version: $($PSVersionTable.OS)"
 
     - name: Run formatting checks
-      shell: powershell
       run: |
         Write-Host "Running PowerShell formatting checks..." -ForegroundColor Cyan
         .\Format-PowerShell.ps1 -Check
@@ -32,7 +38,6 @@ jobs:
         }
 
     - name: Run markdown lint
-      shell: powershell
       run: |
         Write-Host "Running markdownlint with auto-fix..." -ForegroundColor Cyan
         if (-not (Get-Command npx -ErrorAction SilentlyContinue)) {
@@ -43,7 +48,6 @@ jobs:
         git diff --name-only --exit-code
 
     - name: Run unit tests
-      shell: powershell
       run: |
         Write-Host "Running PowerShell unit tests..." -ForegroundColor Cyan
         .\Tests\Test-PowerShellMagic.ps1
@@ -53,7 +57,6 @@ jobs:
         }
 
     - name: Run comprehensive test suite
-      shell: powershell
       run: |
         Write-Host "Running comprehensive test suite..." -ForegroundColor Cyan
         .\Run-Tests.ps1 -CI
@@ -75,13 +78,20 @@ jobs:
   validate-modules:
     name: Validate PowerShell Modules
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v5
 
+    - name: Install PowerShell 7
+      uses: PowerShell/actions-setup-pwsh@v2
+      with:
+        version: '7.4.x'
+
     - name: Test module imports
-      shell: powershell
       run: |
         Write-Host "Testing PowerShell module imports..." -ForegroundColor Cyan
 
