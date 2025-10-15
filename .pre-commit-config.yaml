@@ -43,7 +43,7 @@ repos:
     rev: v0.41.0
     hooks:
       - id: markdownlint
-        args: ['--fix']
+        args: ['--fix', '--config', '.markdownlint.json']
         exclude: 'CHANGELOG.md'
 
 # Global configuration
