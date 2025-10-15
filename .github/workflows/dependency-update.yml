@@ -16,20 +16,23 @@ jobs:
     runs-on: windows-latest
     env:
       GH_TOKEN: ${{ secrets.GH_TOKEN}}
+    defaults:
+      run:
+        shell: pwsh
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v5
 
     - name: Setup PowerShell
-      shell: powershell
+      shell: pwsh
       run: |
         Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
         Write-Host "OS Version: $($PSVersionTable.OS)"
 
     - name: Check for dependency updates
       id: check-updates
-      shell: powershell
+      shell: pwsh
       run: |
         Write-Host "Checking for dependency updates..." -ForegroundColor Cyan
 
@@ -48,7 +51,7 @@ jobs:
 
     - name: Create update branch
       if: steps.check-updates.outputs.updates-available == 'true'
-      shell: powershell
+      shell: pwsh
       run: |
         $branchName = "dependency-updates/$(Get-Date -Format 'yyyy-MM-dd')"
         Write-Host "Creating branch: $branchName" -ForegroundColor Cyan
@@ -80,14 +83,14 @@ jobs:
 
     - name: Update dependencies
       if: steps.check-updates.outputs.updates-available == 'true'
-      shell: powershell
+      shell: pwsh
       run: |
         Write-Host "Updating dependencies..." -ForegroundColor Cyan
         .\Scripts\Update-Dependencies.ps1 -Apply
 
     - name: Commit changes
       if: steps.check-updates.outputs.updates-available == 'true'
-      shell: powershell
+      shell: pwsh
       run: |
         git add Setup-PowerShellMagic.ps1
 
@@ -100,7 +103,7 @@ jobs:
 
     - name: Create Pull Request
       if: steps.check-updates.outputs.updates-available == 'true'
-      shell: powershell
+      shell: pwsh
       run: |
         # Install GitHub CLI if not available
         if (!(Get-Command gh -ErrorAction SilentlyContinue)) {
@@ -121,6 +124,6 @@ jobs:
 
     - name: Cleanup on no updates
       if: steps.check-updates.outputs.updates-available == 'false'
-      shell: powershell
+      shell: pwsh
       run: |
         Write-Host "No dependency updates available. Workflow complete." -ForegroundColor Green
