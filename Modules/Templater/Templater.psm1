@@ -1,6 +1,13 @@
 # Templater.psm1
 using namespace System.Collections.Generic
 
+$script:TemplaterConfigCache = $null
+$script:TemplaterConfigTimestamp = $null
+$script:ZipAssemblyLoaded = $false
+$script:Trusted7ZipPath = $null
+$script:IsWindows = ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT)
+$script:SevenZipWarningEmitted = $false
+
 # Private helper functions
 function Get-TemplaterConfigPath {
     <#
@@ -35,7 +42,13 @@ function Get-TemplaterConfigPath {
         [switch]$ReturnDirectory
     )
 
-    $configDir = Join-Path (Split-Path $PROFILE -Parent) '.config\templater'
+    $configRoot = if ($env:XDG_CONFIG_HOME) {
+        $env:XDG_CONFIG_HOME
+    } else {
+        Join-Path (Split-Path $PROFILE -Parent) '.config'
+    }
+
+    $configDir = Join-Path $configRoot 'templater'
     if (-not (Test-Path $configDir)) {
         New-Item -ItemType Directory -Path $configDir -Force | Out-Null
     }
@@ -51,12 +64,43 @@ function Get-TemplateData {
     $configPath = Get-TemplaterConfigPath
     if (Test-Path $configPath) {
         try {
-            return Get-Content $configPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+            $fileInfo = Get-Item $configPath -ErrorAction Stop
+            if ($script:TemplaterConfigCache -ne $null -and
+                $script:TemplaterConfigTimestamp -eq $fileInfo.LastWriteTimeUtc) {
+                return [hashtable]$script:TemplaterConfigCache.Clone()
+            }
+
+            $data = Get-Content $configPath -Raw -ErrorAction Stop | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+            $script:TemplaterConfigCache = [hashtable]$data.Clone()
+            $script:TemplaterConfigTimestamp = $fileInfo.LastWriteTimeUtc
+            return $data
         } catch {
-            Write-Warning 'Invalid templates.json file. Creating new one.'
+            Write-Warning "Invalid templates.json file detected at '$configPath'. Attempting recovery."
+            $timestamp = Get-Date -Format 'yyyyMMddTHHmmss'
+            $backupPath = "$configPath.backup.$timestamp"
+
+            try {
+                Copy-Item $configPath $backupPath -Force
+                Write-Warning "Backup created at: $backupPath"
+            } catch {
+                Write-Warning "Failed to create backup for corrupt templates.json: $($_.Exception.Message)"
+            }
+
+            $script:TemplaterConfigCache = @{}
+            $script:TemplaterConfigTimestamp = $null
+
+            try {
+                Save-TemplateData -TemplateData @{}
+            } catch {
+                Write-Warning "Failed to reset templates.json: $($_.Exception.Message)"
+            }
+
             return @{}
         }
     }
+
+    $script:TemplaterConfigCache = @{}
+    $script:TemplaterConfigTimestamp = $null
     return @{}
 }
 
@@ -64,7 +108,16 @@ function Save-TemplateData {
     param([hashtable]$TemplateData)
 
     $configPath = Get-TemplaterConfigPath
-    $TemplateData | ConvertTo-Json -Depth 4 | Set-Content $configPath -Encoding UTF8
+    try {
+        $json = $TemplateData | ConvertTo-Json -Depth 4
+        $json | Set-Content $configPath -Encoding UTF8
+        $fileInfo = Get-Item $configPath -ErrorAction Stop
+        $script:TemplaterConfigCache = if ($TemplateData) { [hashtable]$TemplateData.Clone() } else { @{} }
+        $script:TemplaterConfigTimestamp = $fileInfo.LastWriteTimeUtc
+    } catch {
+        $message = "Failed to save template data to '$configPath'. $($_.Exception.Message)"
+        throw (New-Object System.Exception($message, $_.Exception))
+    }
 }
 
 function Update-LastUsed {
@@ -91,13 +144,116 @@ function Test-FzfAvailable {
     }
 }
 
-function Test-7ZipAvailable {
-    try {
-        $null = Get-Command '7z.exe' -ErrorAction Stop
-        return $true
-    } catch {
-        return $false
+function Test-IsTrusted7ZipPath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $safeRoots = @()
+
+    if ($env:LOCALAPPDATA) {
+        $safeRoots += Join-Path (Join-Path $env:LOCALAPPDATA 'PowerShellMagic') 'bin'
     }
+
+    if ($script:IsWindows) {
+        if ($env:ProgramFiles) {
+            $safeRoots += Join-Path $env:ProgramFiles '7-Zip'
+        }
+
+        if (${env:ProgramFiles(x86)}) {
+            $safeRoots += Join-Path ${env:ProgramFiles(x86)} '7-Zip'
+        }
+    } else {
+        $safeRoots += '/usr/bin'
+        $safeRoots += '/usr/local/bin'
+    }
+
+    foreach ($root in $safeRoots | Where-Object { $_ }) {
+        try {
+            $resolvedRoot = (Resolve-Path $root -ErrorAction Stop).Path
+            $comparison = if ($script:IsWindows) { [System.StringComparison]::OrdinalIgnoreCase } else { [System.StringComparison]::Ordinal }
+            if ($Path.StartsWith($resolvedRoot, $comparison)) {
+                return $true
+            }
+        } catch {
+            continue
+        }
+    }
+
+    return $false
+}
+
+function Get-Trusted7ZipExecutable {
+    if ($script:Trusted7ZipPath -and (Test-Path $script:Trusted7ZipPath)) {
+        return $script:Trusted7ZipPath
+    }
+
+    $candidates = New-Object System.Collections.Generic.List[string]
+
+    if ($env:POWERSHELLMAGIC_7ZIP_PATH) {
+        $candidates.Add($env:POWERSHELLMAGIC_7ZIP_PATH)
+    }
+
+    if ($env:LOCALAPPDATA) {
+        $managedBin = Join-Path (Join-Path $env:LOCALAPPDATA 'PowerShellMagic') 'bin'
+        $candidates.Add((Join-Path $managedBin '7z.exe'))
+        $candidates.Add((Join-Path $managedBin '7z'))
+    }
+
+    if ($script:IsWindows) {
+        if ($env:ProgramFiles) {
+            $candidates.Add((Join-Path (Join-Path $env:ProgramFiles '7-Zip') '7z.exe'))
+        }
+
+        if (${env:ProgramFiles(x86)}) {
+            $candidates.Add((Join-Path (Join-Path ${env:ProgramFiles(x86)} '7-Zip') '7z.exe'))
+        }
+    } else {
+        $candidates.Add('/usr/bin/7z')
+        $candidates.Add('/usr/local/bin/7z')
+    }
+
+    foreach ($candidate in $candidates | Where-Object { $_ }) {
+        try {
+            if (Test-Path $candidate) {
+                $script:Trusted7ZipPath = (Resolve-Path $candidate -ErrorAction Stop).Path
+                return $script:Trusted7ZipPath
+            }
+        } catch {
+            continue
+        }
+    }
+
+    $commandNames = if ($script:IsWindows) { @('7z.exe', '7z') } else { @('7z', '7za') }
+
+    foreach ($name in $commandNames) {
+        try {
+            $commandInfo = Get-Command $name -ErrorAction Stop
+            $commandPath = if ($commandInfo.Path) { $commandInfo.Path } else { $commandInfo.Source }
+
+            if ($commandPath) {
+                $resolved = (Resolve-Path $commandPath -ErrorAction Stop).Path
+                if (Test-IsTrusted7ZipPath -Path $resolved) {
+                    $script:Trusted7ZipPath = $resolved
+                    return $script:Trusted7ZipPath
+                } else {
+                    if (-not $script:SevenZipWarningEmitted) {
+                        Write-Warning "Ignoring untrusted 7-Zip executable at '$resolved'."
+                        $script:SevenZipWarningEmitted = $true
+                    }
+                }
+            }
+        } catch {
+            continue
+        }
+    }
+
+    return $null
+}
+
+function Test-7ZipAvailable {
+    return [bool](Get-Trusted7ZipExecutable)
 }
 
 function Extract-Archive {
@@ -118,6 +274,9 @@ function Extract-Archive {
     .PARAMETER CreateSubfolder
     Create a subfolder named after the archive (without extension).
 
+    .PARAMETER Force
+    Overwrite existing files at the destination.
+
     .EXAMPLE
     Extract-Archive -ArchivePath "template.zip"
     Extracts template.zip to current directory
@@ -134,7 +293,9 @@ function Extract-Archive {
         [Parameter(Mandatory = $false)]
         [string]$DestinationPath = $null,
 
-        [switch]$CreateSubfolder
+        [switch]$CreateSubfolder,
+
+        [switch]$Force
     )
 
     # Validate archive exists
@@ -144,16 +305,36 @@ function Extract-Archive {
 
     # Set destination path to current directory if not provided
     if (-not $DestinationPath) {
-        $DestinationPath = Get-Location
+        $DestinationPath = (Get-Location).Path
     }
 
     # Create subfolder if requested
     if ($CreateSubfolder) {
         $archiveBaseName = [System.IO.Path]::GetFileNameWithoutExtension($ArchivePath)
         $DestinationPath = Join-Path $DestinationPath $archiveBaseName
+    }
+
+    try {
         if (-not (Test-Path $DestinationPath)) {
             New-Item -ItemType Directory -Path $DestinationPath -Force | Out-Null
         }
+
+        $DestinationPath = (Resolve-Path $DestinationPath -ErrorAction Stop).Path
+    } catch {
+        throw "Failed to prepare destination directory '$DestinationPath': $($_.Exception.Message)"
+    }
+
+    $existingItem = $null
+    try {
+        $existingItem = Get-ChildItem -LiteralPath $DestinationPath -Force -ErrorAction Stop | Select-Object -First 1
+    } catch [System.Management.Automation.ItemNotFoundException] {
+        # Directory is empty
+    } catch {
+        throw "Failed to inspect destination directory '$DestinationPath': $($_.Exception.Message)"
+    }
+
+    if ($existingItem -and -not $Force) {
+        throw "Destination '$DestinationPath' already contains files. Use -Force to overwrite existing content."
     }
 
     # Get file extension
@@ -162,18 +343,62 @@ function Extract-Archive {
     try {
         switch ($extension) {
             '.zip' {
-                # Use built-in .NET method for ZIP files
-                Add-Type -AssemblyName System.IO.Compression.FileSystem
-                [System.IO.Compression.ZipFile]::ExtractToDirectory($ArchivePath, $DestinationPath)
+                if (-not $script:ZipAssemblyLoaded) {
+                    Add-Type -AssemblyName System.IO.Compression.FileSystem
+                    $script:ZipAssemblyLoaded = $true
+                }
+
+                $archive = [System.IO.Compression.ZipFile]::OpenRead($ArchivePath)
+                try {
+                    foreach ($entry in $archive.Entries) {
+                        if ([string]::IsNullOrWhiteSpace($entry.FullName)) {
+                            continue
+                        }
+
+                        $pathParts = $entry.FullName -split '[\\/]'
+                        $targetPath = $DestinationPath
+                        foreach ($part in $pathParts) {
+                            if ([string]::IsNullOrWhiteSpace($part)) {
+                                continue
+                            }
+                            $targetPath = Join-Path $targetPath $part
+                        }
+
+                        if ([string]::IsNullOrEmpty($entry.Name)) {
+                            if (-not (Test-Path $targetPath)) {
+                                New-Item -ItemType Directory -Path $targetPath -Force | Out-Null
+                            }
+                            continue
+                        }
+
+                        $targetDir = Split-Path $targetPath -Parent
+                        if ($targetDir -and -not (Test-Path $targetDir)) {
+                            New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+                        }
+
+                        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $targetPath, [bool]$Force)
+                    }
+                } finally {
+                    $archive.Dispose()
+                }
+
                 Write-Host "Successfully extracted ZIP: $ArchivePath" -ForegroundColor Green
             }
             { $_ -in @('.7z', '.rar', '.tar', '.gz', '.bz2', '.xz') } {
-                # Use 7-Zip for other formats
-                if (-not (Test-7ZipAvailable)) {
-                    throw "7-Zip (7z.exe) not found in PATH. Please install 7-Zip for $extension files."
+                $sevenZip = Get-Trusted7ZipExecutable
+                if (-not $sevenZip) {
+                    throw "Trusted 7-Zip executable not found. Install 7-Zip via Setup-PowerShellMagic or set POWERSHELLMAGIC_7ZIP_PATH."
                 }
 
-                $process = Start-Process -FilePath '7z.exe' -ArgumentList "x `"$ArchivePath`" -o`"$DestinationPath`" -y" -Wait -NoNewWindow -PassThru
+                $archiveArg = "`"$ArchivePath`""
+                $destinationArg = "-o`"$DestinationPath`""
+                $argumentList = @('x', $archiveArg, $destinationArg, '-y')
+
+                if ($Force) {
+                    $argumentList += '-aoa'
+                }
+
+                $process = Start-Process -FilePath $sevenZip -ArgumentList $argumentList -Wait -NoNewWindow -PassThru
 
                 if ($process.ExitCode -eq 0) {
                     Write-Host "Successfully extracted $extension : $ArchivePath" -ForegroundColor Green
@@ -188,7 +413,7 @@ function Extract-Archive {
 
         return $DestinationPath
     } catch {
-        Write-Error "Failed to extract archive: $_"
+        Write-Error "Failed to extract archive: $($_.Exception.Message)"
         throw
     }
 }
@@ -226,7 +451,10 @@ function Get-TemplatePreview {
     try {
         switch ($extension) {
             '.zip' {
-                Add-Type -AssemblyName System.IO.Compression.FileSystem
+                if (-not $script:ZipAssemblyLoaded) {
+                    Add-Type -AssemblyName System.IO.Compression.FileSystem
+                    $script:ZipAssemblyLoaded = $true
+                }
                 $zip = [System.IO.Compression.ZipFile]::OpenRead($TemplatePath)
                 $preview += "Archive Contents:`n"
                 $zip.Entries | ForEach-Object {
@@ -235,8 +463,9 @@ function Get-TemplatePreview {
                 $zip.Dispose()
             }
             { $_ -in @('.7z', '.rar', '.tar', '.gz', '.bz2', '.xz') } {
-                if (Test-7ZipAvailable) {
-                    $result = & 7z.exe l $TemplatePath 2>$null
+                $sevenZip = Get-Trusted7ZipExecutable
+                if ($sevenZip) {
+                    $result = & $sevenZip 'l' $TemplatePath 2>$null
                     if ($LASTEXITCODE -eq 0) {
                         $preview += "Archive Contents:`n" + ($result -join "`n")
                     } else {
@@ -737,7 +966,7 @@ function Use-Template {
             switch ($template.Type) {
                 'File' {
                     # Extract archive
-                    $result = Extract-Archive -ArchivePath $template.Path -DestinationPath $finalDestination
+                    $result = Extract-Archive -ArchivePath $template.Path -DestinationPath $finalDestination -Force:$Force
                     Write-Host 'Template extracted successfully!' -ForegroundColor Green
                 }
                 'Folder' {

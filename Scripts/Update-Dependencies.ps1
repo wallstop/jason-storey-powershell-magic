@@ -50,12 +50,21 @@ function Write-Info {
     Write-Host "[INFO] $Message" -ForegroundColor Cyan
 }
 
-function Write-Warning {
+function Write-WarningMessage {
+    param($Message)
+    Microsoft.PowerShell.Utility\Write-Warning "[WARN] $Message"
+}
+
+function Write-ErrorMessage {
+    param($Message)
+    Microsoft.PowerShell.Utility\Write-Error -Message "[ERROR] $Message"
+}
+function Write-HostWarning {
     param($Message)
     Write-Host "[WARN] $Message" -ForegroundColor Yellow
 }
 
-function Write-Error {
+function Write-HostError {
     param($Message)
     Write-Host "[ERROR] $Message" -ForegroundColor Red
 }
@@ -68,7 +77,7 @@ $DependencyUpdaters = @{
         AssetPattern = 'fzf-*-windows_amd64.zip'
         CurrentUrlPattern = 'https://github.com/junegunn/fzf/releases/download/v*/fzf-*-windows_amd64.zip'
         GetLatestVersion = {
-            $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/junegunn/fzf/releases/latest"
+            $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/junegunn/fzf/releases/latest" -ErrorAction Stop
             return $releases.tag_name.TrimStart('v')
         }
         BuildUrl = {
@@ -81,7 +90,7 @@ $DependencyUpdaters = @{
         GetLatestVersion = {
             # 7-Zip doesn't have a proper API, so we scrape the download page
             try {
-                $response = Invoke-WebRequest -Uri "https://www.7-zip.org/download.html" -UseBasicParsing
+                $response = Invoke-WebRequest -Uri "https://www.7-zip.org/download.html" -UseBasicParsing -ErrorAction Stop
                 # Look for the x64 exe download link
                 if ($response.Content -match 'href="a/(7z(\d+)-x64\.exe)"') {
                     $filename = $matches[1]
@@ -91,7 +100,7 @@ $DependencyUpdaters = @{
                     }
                 }
             } catch {
-                Write-Warning "Failed to check 7-Zip version: $($_.Exception.Message)"
+                Write-WarningMessage "Failed to check 7-Zip version: $($_.Exception.Message)"
                 return $null
             }
             return $null
@@ -107,7 +116,7 @@ $DependencyUpdaters = @{
         AssetPattern = 'eza.exe_x86_64-pc-windows-gnu.zip'
         CurrentUrlPattern = 'https://github.com/eza-community/eza/releases/download/v*/eza.exe_x86_64-pc-windows-gnu.zip'
         GetLatestVersion = {
-            $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/eza-community/eza/releases/latest"
+            $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/eza-community/eza/releases/latest" -ErrorAction Stop
             return $releases.tag_name.TrimStart('v')
         }
         BuildUrl = {
@@ -190,7 +199,7 @@ function Get-FileHash-Remote {
         $ProgressPreference = 'SilentlyContinue'
 
         try {
-            Invoke-WebRequest -Uri $Url -OutFile $tempFile -UseBasicParsing
+            Invoke-WebRequest -Uri $Url -OutFile $tempFile -UseBasicParsing -ErrorAction Stop
         } finally {
             $ProgressPreference = $progressPreference
         }
@@ -199,12 +208,12 @@ function Get-FileHash-Remote {
             throw "Download failed - file not created"
         }
 
-        $hash = Get-FileHash -Path $tempFile -Algorithm SHA256
+        $hash = Get-FileHash -Path $tempFile -Algorithm SHA256 -ErrorAction Stop
         Write-Success "Successfully calculated hash for $DependencyName"
         return $hash.Hash
 
     } catch {
-        Write-Error "Failed to download and hash $DependencyName from $Url`: $($_.Exception.Message)"
+        Write-ErrorMessage "Failed to download and hash $DependencyName from $Url`: $($_.Exception.Message)"
         return $null
     } finally {
         if (Test-Path $tempFile) {
@@ -230,7 +239,7 @@ function Test-DependencyUpdates {
         $currentDep = $currentDeps[$depKey]
 
         if (-not $currentDep) {
-            Write-Warning "No current dependency found for $($updater.Name)"
+            Write-WarningMessage "No current dependency found for $($updater.Name)"
             continue
         }
 
@@ -240,7 +249,7 @@ function Test-DependencyUpdates {
             $latestVersion = & $updater.GetLatestVersion
 
             if (-not $latestVersion) {
-                Write-Warning "Could not determine latest version for $($updater.Name)"
+                Write-WarningMessage "Could not determine latest version for $($updater.Name)"
                 continue
             }
 
@@ -264,13 +273,13 @@ function Test-DependencyUpdates {
                     $summary += "- $($updater.Name): $($currentDep.Version) -> $latestVersion"
                     Write-Success "$($updater.Name) update available: $($currentDep.Version) -> $latestVersion"
                 } else {
-                    Write-Error "Failed to verify new version of $($updater.Name)"
+                    Write-ErrorMessage "Failed to verify new version of $($updater.Name)"
                 }
             } else {
                 Write-Success "$($updater.Name) is up to date"
             }
         } catch {
-            Write-Error "Error checking $($updater.Name): $($_.Exception.Message)"
+            Write-ErrorMessage "Error checking $($updater.Name): $($_.Exception.Message)"
         }
     }
 
@@ -378,7 +387,7 @@ function Main {
         }
 
     } catch {
-        Write-Error "Script failed: $($_.Exception.Message)"
+        Write-ErrorMessage "Script failed: $($_.Exception.Message)"
         exit 1
     }
 }

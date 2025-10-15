@@ -1,6 +1,26 @@
 # Unitea.psm1
 using namespace System.Collections.Generic
 
+$script:UnityProjectsCache = $null
+$script:UnityProjectsTimestamp = $null
+
+function New-UnityProjectsData {
+    return [ordered]@{}
+}
+
+function Copy-UnityProjectsData {
+    param(
+        [hashtable]$ProjectsData
+    )
+
+    if (-not $ProjectsData) {
+        return New-UnityProjectsData
+    }
+
+    $json = $ProjectsData | ConvertTo-Json -Depth 10
+    return $json | ConvertFrom-Json -AsHashtable
+}
+
 # Private helper functions
 function Get-UnityConfigPath {
     <#

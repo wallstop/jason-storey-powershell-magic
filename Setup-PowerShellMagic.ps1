@@ -30,7 +30,10 @@ Force reinstall of dependencies and overwrite profile changes.
 Where to install portable tools. Default: $env:LOCALAPPDATA\PowerShellMagic
 
 .PARAMETER NonInteractive
-Run in non-interactive mode, automatically answering 'n' to all prompts
+Run in non-interactive mode, automatically answering prompts without waiting for input.
+
+.PARAMETER AssumeYes
+When combined with -NonInteractive, automatically answer 'y' to confirmation prompts.
 
 .EXAMPLE
 .\Setup-PowerShellMagic.ps1
@@ -47,6 +50,10 @@ Only import modules, skip dependency installation
 .EXAMPLE
 .\Setup-PowerShellMagic.ps1 -NonInteractive
 Run setup without any user prompts (for testing)
+
+.EXAMPLE
+.\Setup-PowerShellMagic.ps1 -NonInteractive -AssumeYes
+Run setup without prompts, auto-confirming all questions (for CI)
 #>
 
 [CmdletBinding()]
@@ -55,7 +62,8 @@ param(
     [switch]$SkipProfileImport,
     [switch]$Force,
     [string]$InstallLocation = (Join-Path $env:LOCALAPPDATA 'PowerShellMagic'),
-    [switch]$NonInteractive
+    [switch]$NonInteractive,
+    [switch]$AssumeYes
 )
 
 # Color output functions
@@ -67,11 +75,19 @@ function Write-Info {
     param($Message)
     Write-Host "[INFO] $Message" -ForegroundColor Cyan
 }
-function Write-Warning {
+function Write-WarningMessage {
+    param($Message)
+    Microsoft.PowerShell.Utility\Write-Warning "[WARN] $Message"
+}
+function Write-ErrorMessage {
+    param($Message)
+    Microsoft.PowerShell.Utility\Write-Error -Message "[ERROR] $Message"
+}
+function Write-HostWarning {
     param($Message)
     Write-Host "[WARN] $Message" -ForegroundColor Yellow
 }
-function Write-Error {
+function Write-HostError {
     param($Message)
     Write-Host "[ERROR] $Message" -ForegroundColor Red
 }
@@ -84,8 +100,9 @@ function Get-UserResponse {
     )
 
     if ($NonInteractive) {
-        Write-Info "Non-interactive mode: Auto-answering '$DefaultResponse' for: $Prompt"
-        return $DefaultResponse
+        $response = if ($AssumeYes) { 'y' } else { $DefaultResponse }
+        Write-Info "Non-interactive mode: Auto-answering '$response' for: $Prompt"
+        return $response
     } else {
         return Read-Host $Prompt
     }
@@ -100,7 +117,7 @@ $Dependencies = @{
     'fzf' = @{
         Name = 'fzf'
         Description = 'Fuzzy finder for interactive selection'
-        TestCommand = 'fzf --version'
+        TestCommand = @('fzf', '--version')
         PortableUrl = 'https://github.com/junegunn/fzf/releases/download/v0.66.0/fzf-0.66.0-windows_amd64.zip'
         PortableSHA256 = '9D2A1BC6E38665D0A15D846703A2C9EF1F5FE2630A9F972F9832712709C18823'
         PortableExe = 'fzf.exe'
@@ -119,7 +136,7 @@ $Dependencies = @{
     '7zip' = @{
         Name = '7-Zip'
         Description = 'Archive extraction tool'
-        TestCommand = '7z'
+        TestCommand = @('7z')
         PortableUrl = 'https://www.7-zip.org/a/7z2501-x64.exe'
         PortableSHA256 = '78AFA2A1C773CAF3CF7EDF62F857D2A8A5DA55FB0FFF5DA416074C0D28B2B55F'
         ScoopPackage = '7zip'
@@ -138,7 +155,7 @@ $Dependencies = @{
     'eza' = @{
         Name = 'eza'
         Description = 'Modern ls replacement with better directory previews'
-        TestCommand = 'eza --version'
+        TestCommand = @('eza', '--version')
         PortableUrl = 'https://github.com/eza-community/eza/releases/download/v0.23.4/eza.exe_x86_64-pc-windows-gnu.zip'
         PortableSHA256 = '032963c3d47134d7976f8e17b0201efcff09fdcc7742d8a0db2135b38c8ce1f8'
         PortableExe = 'eza.exe'
@@ -171,13 +188,13 @@ function Test-FileHash {
     )
 
     if (-not (Test-Path $FilePath)) {
-        Write-Error "File not found: $FilePath"
+        Write-ErrorMessage "File not found: $FilePath"
         return $false
     }
 
     if ($ExpectedHash -like 'NOTE:*') {
-        Write-Warning 'No checksum available for verification'
-        Write-Warning "$ExpectedHash"
+        Write-WarningMessage 'No checksum available for verification'
+        Write-WarningMessage "$ExpectedHash"
         $continue = Get-UserResponse 'Continue without verification? (y/N)' 'N'
         return ($continue -match '^[Yy]')
     }
@@ -191,15 +208,15 @@ function Test-FileHash {
             Write-Info "Expected: $ExpectedHash"
             Write-Info "Actual:   $($actualHash.Hash)"
         } else {
-            Write-Error 'CRYPTOGRAPHIC VERIFICATION FAILED!'
-            Write-Error "Expected: $ExpectedHash"
-            Write-Error "Actual:   $($actualHash.Hash)"
-            Write-Error 'This could indicate file corruption or tampering.'
+            Write-ErrorMessage 'CRYPTOGRAPHIC VERIFICATION FAILED!'
+            Write-ErrorMessage "Expected: $ExpectedHash"
+            Write-ErrorMessage "Actual:   $($actualHash.Hash)"
+            Write-ErrorMessage 'This could indicate file corruption or tampering.'
         }
 
         return $hashMatch
     } catch {
-        Write-Error "Failed to calculate file hash: $($_.Exception.Message)"
+        Write-ErrorMessage "Failed to calculate file hash: $($_.Exception.Message)"
         return $false
     }
 }
@@ -236,28 +253,59 @@ function Test-PackageManager {
     return $false
 }
 
+function Get-CommandTokens {
+    param(
+        [Parameter(Mandatory = $true)]
+        $TestCommand
+    )
+
+    if ($null -eq $TestCommand) {
+        return @()
+    }
+
+    if ($TestCommand -is [System.Collections.IEnumerable] -and -not ($TestCommand -is [string])) {
+        return @($TestCommand | Where-Object { $_ -is [string] -and $_.Length -gt 0 })
+    }
+
+    $tokens = $null
+    $errors = $null
+    [System.Management.Automation.Language.Parser]::ParseInput($TestCommand, [ref]$tokens, [ref]$errors) | Out-Null
+
+    if ($errors -and $errors.Count -gt 0) {
+        throw "Invalid TestCommand '$TestCommand': $($errors[0].Message)"
+    }
+
+    $commandTokens = @()
+    foreach ($token in $tokens) {
+        if ($token.Kind -eq [System.Management.Automation.Language.TokenKind]::EndOfInput) {
+            continue
+        }
+
+        if ($token -is [System.Management.Automation.Language.StringToken]) {
+            $commandTokens += $token.Value
+        } elseif ($token.Text) {
+            $commandTokens += $token.Text
+        }
+    }
+
+    return $commandTokens
+}
+
 function Test-Dependency {
     param($Dependency)
 
     try {
-        $testCmd = $Dependency.TestCommand
-        if ($testCmd -like '*7z*') {
-            # Special handling for 7zip which might be 7z.exe or 7z
-            try {
-                $null = & 7z.exe | Out-Null
-                return $true
-            } catch {
-                try {
-                    $null = & 7z | Out-Null
-                    return $true
-                } catch {
-                    return $false
-                }
-            }
-        } else {
-            $null = Invoke-Expression "$testCmd 2>&1" -ErrorAction Stop
-            return $true
+        $commandTokens = Get-CommandTokens -TestCommand $Dependency.TestCommand
+        if (-not $commandTokens) {
+            return $false
         }
+
+        $command = $commandTokens[0]
+        $arguments = if ($commandTokens.Count -gt 1) { $commandTokens[1..($commandTokens.Count - 1)] } else { @() }
+
+        $global:LASTEXITCODE = 0
+        $null = & $command @arguments 2>$null | Out-Null
+        return ($LASTEXITCODE -eq 0)
     } catch {
         return $false
     }
@@ -288,7 +336,7 @@ function Install-DependencyPortable {
 
         # Use modern download method
         if ($PSVersionTable.PSVersion.Major -ge 3) {
-            Invoke-WebRequest -Uri $Dependency.PortableUrl -OutFile $tempFile -UseBasicParsing
+            Invoke-WebRequest -Uri $Dependency.PortableUrl -OutFile $tempFile -UseBasicParsing -ErrorAction Stop
         } else {
             $webClient = New-Object System.Net.WebClient
             $webClient.DownloadFile($Dependency.PortableUrl, $tempFile)
@@ -298,7 +346,7 @@ function Install-DependencyPortable {
         # Verify downloaded file
         Write-Info 'Verifying download integrity...'
         if (-not (Test-FileHash -FilePath $tempFile -ExpectedHash $Dependency.PortableSHA256)) {
-            Write-Error 'File verification failed. Aborting installation.'
+            Write-ErrorMessage 'File verification failed. Aborting installation.'
             return $false
         }
 
@@ -345,7 +393,7 @@ function Install-DependencyPortable {
         return $true
 
     } catch {
-        Write-Error "Failed to install $($Dependency.Name): $($_.Exception.Message)"
+        Write-ErrorMessage "Failed to install $($Dependency.Name): $($_.Exception.Message)"
         return $false
     } finally {
         if (Test-Path $tempFile) {
@@ -403,7 +451,7 @@ function Install-DependencyPackageManager {
         return $false
 
     } catch {
-        Write-Error "Error installing $($Dependency.Name) via ${Manager}: $($_.Exception.Message)"
+        Write-ErrorMessage "Error installing $($Dependency.Name) via ${Manager}: $($_.Exception.Message)"
         return $false
     }
 }
@@ -469,7 +517,7 @@ function Install-Dependency {
     if ($Dependency.PortableUrl) {
         return Install-DependencyPortable -Dependency $Dependency
     } else {
-        Write-Error "No installation method available for $($Dependency.Name)"
+        Write-ErrorMessage "No installation method available for $($Dependency.Name)"
         return $false
     }
 }
@@ -510,7 +558,7 @@ function Import-ModulesInProfile {
 
     if ($missingModules.Count -gt 0) {
         $missingList = $missingModules -join ', '
-        Write-Error "Missing modules: $missingList"
+        Write-ErrorMessage "Missing modules: $missingList"
         return $false
     }
 
@@ -610,14 +658,14 @@ function Import-ModulesInProfile {
                 Import-Module $modulePaths[$module] -Force -ErrorAction Stop
                 Write-Success "$module module imported successfully"
             } catch {
-                Write-Error "Failed to import $module module: $($_.Exception.Message)"
+                Write-ErrorMessage "Failed to import $module module: $($_.Exception.Message)"
             }
         }
 
         return $true
 
     } catch {
-        Write-Error "Failed to update profile: $($_.Exception.Message)"
+        Write-ErrorMessage "Failed to update profile: $($_.Exception.Message)"
         return $false
     }
 }

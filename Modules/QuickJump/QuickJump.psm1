@@ -2,10 +2,58 @@
 using namespace System.Collections.Generic
 
 # Module variables
-$script:ConfigPath = Join-Path (Split-Path $PROFILE -Parent) '.config\quickjump\paths.json'
-$script:DefaultConfig = @{
-    paths = @()
-    version = '1.0'
+$script:QuickJumpConfigCache = $null
+$script:QuickJumpConfigTimestamp = $null
+
+function New-QuickJumpConfig {
+    return @{
+        paths = @()
+        version = '1.0'
+    }
+}
+
+function Copy-QuickJumpConfig {
+    param(
+        [hashtable]$Config
+    )
+
+    if (-not $Config) {
+        return New-QuickJumpConfig
+    }
+
+    $json = $Config | ConvertTo-Json -Depth 10
+    return $json | ConvertFrom-Json -AsHashtable
+}
+
+function ConvertTo-QuickJumpRecord {
+    param(
+        [hashtable]$Entry
+    )
+
+    $useCount = 0
+    if ($Entry.ContainsKey('useCount') -and $Entry.useCount -ne $null) {
+        [int]::TryParse($Entry.useCount.ToString(), [ref]$useCount) | Out-Null
+    }
+
+    $lastUsedDate = $null
+    if ($Entry.lastUsed) {
+        [DateTime]::TryParseExact(
+            $Entry.lastUsed,
+            'yyyy-MM-dd HH:mm:ss',
+            $null,
+            [System.Globalization.DateTimeStyles]::AssumeLocal,
+            [ref]$lastUsedDate
+        ) | Out-Null
+    }
+
+    return [PSCustomObject]@{
+        Alias = $Entry.alias
+        Path = $Entry.path
+        Category = $Entry.category
+        LastUsed = $lastUsedDate
+        LastUsedString = $Entry.lastUsed
+        UseCount = $useCount
+    }
 }
 
 #region Helper Functions
@@ -42,7 +90,13 @@ function Get-QuickJumpConfigPath {
         [switch]$ReturnDirectory
     )
 
-    $configDir = Join-Path (Split-Path $PROFILE -Parent) '.config\quickjump'
+    $configRoot = if ($env:XDG_CONFIG_HOME) {
+        $env:XDG_CONFIG_HOME
+    } else {
+        Join-Path (Split-Path $PROFILE -Parent) '.config'
+    }
+
+    $configDir = Join-Path $configRoot 'quickjump'
     if (-not (Test-Path $configDir)) {
         New-Item -ItemType Directory -Path $configDir -Force | Out-Null
     }
@@ -58,25 +112,71 @@ function Get-QuickJumpConfig {
     $configPath = Get-QuickJumpConfigPath
     if (Test-Path $configPath) {
         try {
-            $content = Get-Content $configPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
-            return $content
+            $fileInfo = Get-Item $configPath -ErrorAction Stop
+
+            if ($script:QuickJumpConfigCache -ne $null -and
+                $script:QuickJumpConfigTimestamp -eq $fileInfo.LastWriteTimeUtc) {
+                return Copy-QuickJumpConfig -Config $script:QuickJumpConfigCache
+            }
+
+            $config = Get-Content $configPath -Raw -ErrorAction Stop |
+                ConvertFrom-Json -AsHashtable -ErrorAction Stop
+
+            if (-not $config) {
+                $config = New-QuickJumpConfig
+            }
+
+            if (-not $config.ContainsKey('paths') -or -not $config.paths) {
+                $config.paths = @()
+            }
+
+            $script:QuickJumpConfigCache = Copy-QuickJumpConfig -Config $config
+            $script:QuickJumpConfigTimestamp = $fileInfo.LastWriteTimeUtc
+
+            return Copy-QuickJumpConfig -Config $config
         } catch {
-            Write-Warning 'Invalid paths.json file. Creating backup and using default config.'
-            Copy-Item $configPath "$configPath.backup"
-            return $script:DefaultConfig
+            Write-Warning "QuickJump configuration at '$configPath' is invalid: $($_.Exception.Message)"
+            $timestamp = Get-Date -Format 'yyyyMMddTHHmmss'
+            $backupPath = "$configPath.backup.$timestamp"
+
+            try {
+                Copy-Item $configPath $backupPath -Force
+                Write-Warning "Backup created at: $backupPath"
+            } catch {
+                Write-Warning "Failed to create backup for corrupt QuickJump configuration: $($_.Exception.Message)"
+            }
+
+            $resetConfig = New-QuickJumpConfig
+            try {
+                Save-QuickJumpConfig -Config $resetConfig
+            } catch {
+                Write-Warning "Failed to reset QuickJump configuration: $($_.Exception.Message)"
+            }
+
+            return Copy-QuickJumpConfig -Config $resetConfig
         }
     }
-    return $script:DefaultConfig
+
+    $config = New-QuickJumpConfig
+    $script:QuickJumpConfigCache = Copy-QuickJumpConfig -Config $config
+    $script:QuickJumpConfigTimestamp = $null
+    return Copy-QuickJumpConfig -Config $config
 }
 
 function Save-QuickJumpConfig {
     param([hashtable]$Config)
 
+    $configPath = Get-QuickJumpConfigPath
+
     try {
-        $configPath = Get-QuickJumpConfigPath
-        $Config | ConvertTo-Json -Depth 10 | Set-Content $configPath -Encoding UTF8
+        $json = $Config | ConvertTo-Json -Depth 10
+        $json | Set-Content $configPath -Encoding UTF8
+        $fileInfo = Get-Item $configPath -ErrorAction Stop
+        $script:QuickJumpConfigCache = Copy-QuickJumpConfig -Config $Config
+        $script:QuickJumpConfigTimestamp = $fileInfo.LastWriteTimeUtc
     } catch {
-        throw "Failed to save configuration: $_"
+        $message = "Failed to save QuickJump configuration to '$configPath'. $($_.Exception.Message)"
+        throw (New-Object System.Exception($message, $_.Exception))
     }
 }
 
@@ -494,46 +594,41 @@ function Get-QuickJumpPaths {
     )
 
     $config = Get-QuickJumpConfig
+    $allPaths = @($config.paths)
 
-    if ($config.paths.Count -eq 0) {
+    if ($allPaths.Count -eq 0) {
         Write-Host "No paths saved yet. Use 'Add-QuickJumpPath' to add some paths." -ForegroundColor Yellow
-        return
+        return @()
     }
 
-    # Handle list categories
     if ($ListCategories) {
-        $categories = $config.paths | Where-Object { $_.category } |
-            Select-Object -ExpandProperty category -Unique | Sort-Object
+        $categoryGroups = $allPaths | Where-Object { $_.category } | Group-Object -Property category
 
-        if ($categories.Count -eq 0) {
-            Write-Host 'No categories found.' -ForegroundColor Yellow
-            return
+        if ($categoryGroups.Count -eq 0) {
+            return @()
         }
 
-        Write-Host "`nAvailable Categories:" -ForegroundColor Cyan
-        Write-Host ('=' * 50) -ForegroundColor Cyan
-
-        foreach ($cat in $categories) {
-            $count = ($config.paths | Where-Object { $_.category -eq $cat }).Count
-            Write-Host ('{0} ({1} paths)' -f $cat, $count) -ForegroundColor White
+        return $categoryGroups | Sort-Object Name | ForEach-Object {
+            [PSCustomObject]@{
+                Category = $_.Name
+                PathCount = $_.Count
+            }
         }
-        return
     }
 
-    # Handle direct alias lookup
     if ($Alias) {
-        $entry = $config.paths | Where-Object { $_.alias -eq $Alias }
+        $entry = $allPaths | Where-Object { $_.alias -eq $Alias } | Select-Object -First 1
         if ($entry) {
             if ($Path) {
                 return $entry.path
             } else {
-                Update-PathUsage -Path $entry.path -Alias $Alias
+                Update-PathUsage -Path $entry.path -Alias $entry.alias
                 Set-Location $entry.path
-                Write-Host "Jumped to '$Alias': $($entry.path)" -ForegroundColor Green
+                Write-Host "Jumped to: $($entry.path)" -ForegroundColor Green
             }
         } else {
             Write-Error "No path found with alias '$Alias'"
-            $availableAliases = $config.paths | Where-Object { $_.alias } | Select-Object -ExpandProperty alias
+            $availableAliases = $allPaths | Where-Object { $_.alias } | Select-Object -ExpandProperty alias
             if ($availableAliases) {
                 Write-Host "Available aliases: $($availableAliases -join ', ')" -ForegroundColor Yellow
             }
@@ -541,22 +636,33 @@ function Get-QuickJumpPaths {
         return
     }
 
-    # Filter by category if specified
-    $filteredPaths = $config.paths
+    $filteredPaths = $allPaths
     if ($Category) {
         $filteredPaths = $filteredPaths | Where-Object { $_.category -eq $Category }
+        $filteredPaths = @($filteredPaths)
         if ($filteredPaths.Count -eq 0) {
             Write-Error "No paths found in category '$Category'"
-            $availableCategories = $config.paths | Where-Object { $_.category } |
+            $availableCategories = $allPaths | Where-Object { $_.category } |
                 Select-Object -ExpandProperty category -Unique | Sort-Object
             if ($availableCategories) {
                 Write-Host "Available categories: $($availableCategories -join ', ')" -ForegroundColor Yellow
             }
             return
         }
+    } else {
+        $filteredPaths = @($filteredPaths)
     }
 
-    # Interactive selection
+    $records = $filteredPaths | ForEach-Object { ConvertTo-QuickJumpRecord -Entry $_ }
+
+    $sortedRecords = if ($SortByRecent) {
+        $records | Sort-Object -Descending -Property @{ Expression = { if ($_.LastUsed) { $_.LastUsed } else { [DateTime]::MinValue } } }
+    } elseif ($SortByMostUsed) {
+        $records | Sort-Object -Descending -Property UseCount
+    } else {
+        $records | Sort-Object -Property @{ Expression = { if ($_.Alias) { $_.Alias } else { '' } } }, @{ Expression = { $_.Path } }
+    }
+
     if ($Interactive) {
         if (-not (Test-FzfAvailable)) {
             Write-Error 'fzf is not available. Please install fzf first.'
@@ -564,41 +670,24 @@ function Get-QuickJumpPaths {
             return
         }
 
-        # Sort paths based on options
-        $sortedPaths = if ($SortByRecent) {
-            $filteredPaths | Sort-Object {
-                if ($_.lastUsed) {
-                    [DateTime]::ParseExact($_.lastUsed, 'yyyy-MM-dd HH:mm:ss', $null)
-                } else {
-                    [DateTime]::MinValue
-                }
-            } -Descending
-        } elseif ($SortByMostUsed) {
-            $filteredPaths | Sort-Object { [int]$_.useCount } -Descending
-        } else {
-            $filteredPaths | Sort-Object { $_.alias }, { $_.path }
-        }
-
-        # Prepare fzf items
         $fzfItems = @()
-        $sortedPaths | ForEach-Object {
-            $alias = if ($_.alias) { "$($_.alias): " } else { '' }
-            $category = if ($_.category) { " [$($_.category)]" } else { '' }
-            $lastUsed = if ($_.lastUsed) { "Last: $($_.lastUsed)" } else { 'Never used' }
-            $useCount = "Uses: $($_.useCount)"
+        foreach ($record in $sortedRecords) {
+            $aliasText = if ($record.Alias) { "$($record.Alias): " } else { '' }
+            $categoryText = if ($record.Category) { " [$($record.Category)]" } else { '' }
+            $lastUsedText = if ($record.LastUsed) { "Last: $($record.LastUsed.ToString('yyyy-MM-dd HH:mm:ss'))" } else { 'Never used' }
+            $useCountText = "Uses: $($record.UseCount)"
 
-            # Shorten path for display
-            $displayPath = $_.path
+            $displayPath = $record.Path
             if ($displayPath.Length -gt 60) {
-                $pathParts = $displayPath -split '[\\\/]'
+                $pathParts = $displayPath -split '[\\/]'
                 if ($pathParts.Length -gt 3) {
                     $drive = $pathParts[0]
-                    $lastParts = $pathParts[-2..-1] -join '\'
+                    $lastParts = $pathParts[-2..-1] -join '\\'
                     $displayPath = "$drive\[...]\$lastParts"
                 }
             }
 
-            $fzfItems += @("$alias$displayPath$category", "$useCount", "$lastUsed", "$($_.path)") -join ' | '
+            $fzfItems += @("$aliasText$displayPath$categoryText", "$useCountText", "$lastUsedText", "$($record.Path)") -join ' | '
         }
 
         try {
@@ -608,61 +697,27 @@ function Get-QuickJumpPaths {
             $selected = $fzfItems | & fzf --height=60% --reverse --border --header="$headerText" --delimiter="|" --with-nth="1,2,3" --preview="powershell -c `"if (Get-Command eza -ErrorAction SilentlyContinue) { eza -la '{4}' } elseif (Get-Command ls -ErrorAction SilentlyContinue) { ls -la '{4}' } else { Get-ChildItem '{4}' }`""
 
             if ($selected) {
-                $selectedPath = ($selected -split ' \| ')[-1].Trim()  # Last part is the full path
+                $selectedPath = ($selected -split ' \| ')[-1].Trim()
 
                 if ($Path) {
                     return $selectedPath
                 } else {
-                    $entry = $config.paths | Where-Object { $_.path -eq $selectedPath }
+                    $entry = $filteredPaths | Where-Object { $_.path -eq $selectedPath } | Select-Object -First 1
                     if ($entry) {
                         Update-PathUsage -Path $selectedPath -Alias $entry.alias
-                        Set-Location $selectedPath
-                        Write-Host "Jumped to: $selectedPath" -ForegroundColor Green
                     }
+                    Set-Location $selectedPath
+                    Write-Host "Jumped to: $selectedPath" -ForegroundColor Green
                 }
             }
         } catch {
             Write-Error "Error running fzf: $($_.Exception.Message)"
         }
-    } else {
-        # Just list paths
-        $categoryText = if ($Category) { " in Category '$Category'" } else { '' }
-        Write-Host "`nSaved QuickJump Paths${categoryText}:" -ForegroundColor Cyan
-        Write-Host ('=' * 100) -ForegroundColor Cyan
 
-        # Sort paths
-        $sortedPaths = if ($SortByRecent) {
-            $filteredPaths | Sort-Object {
-                if ($_.lastUsed) {
-                    [DateTime]::ParseExact($_.lastUsed, 'yyyy-MM-dd HH:mm:ss', $null)
-                } else {
-                    [DateTime]::MinValue
-                }
-            } -Descending
-        } elseif ($SortByMostUsed) {
-            $filteredPaths | Sort-Object { [int]$_.useCount } -Descending
-        } else {
-            $filteredPaths | Sort-Object { $_.alias }, { $_.path }
-        }
-
-        $sortedPaths | ForEach-Object {
-            $alias = if ($_.alias) { $_.alias.PadRight(15) } else { '(no alias)'.PadRight(15) }
-            $category = if ($_.category) { "[$($_.category)]".PadRight(12) } else { ''.PadRight(12) }
-            $lastUsed = if ($_.lastUsed) { $_.lastUsed } else { 'Never' }
-            $useCount = "Uses: $($_.useCount)".PadRight(10)
-
-            Write-Host "$alias $category $useCount $lastUsed" -ForegroundColor White
-            Write-Host "$(' '*15) $($_.path)" -ForegroundColor Gray
-            Write-Host ''
-        }
-
-        Write-Host 'Usage Examples:' -ForegroundColor Yellow
-        Write-Host '  Get-QuickJumpPaths -Interactive                  # Use fzf selection' -ForegroundColor Yellow
-        Write-Host "  Get-QuickJumpPaths -Category 'projects'         # Filter by category" -ForegroundColor Yellow
-        Write-Host '  Get-QuickJumpPaths -SortByMostUsed              # Sort by usage count' -ForegroundColor Yellow
-        Write-Host "  Get-QuickJumpPaths -Alias 'docs'                # Jump to alias directly" -ForegroundColor Yellow
-        Write-Host "  Get-QuickJumpPaths -Alias 'docs' -Path          # Get path for alias" -ForegroundColor Yellow
+        return
     }
+
+    return $sortedRecords
 }
 
 function Invoke-QuickJump {
