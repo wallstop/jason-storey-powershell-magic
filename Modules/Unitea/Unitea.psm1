@@ -447,7 +447,7 @@ function Get-UnityProjects {
                 $headerText += ' - Sorted by Recent'
             }
 
-            $selected = $fzfItems | fzf --height=40% --reverse --border --header="$headerText" --delimiter='|' --with-nth=1,2,3,4 --preview='Write-Output {5}'
+            $selected = $fzfItems | fzf --height=40% --reverse --border --header="$headerText" --delimiter='|' --with-nth=1, 2, 3, 4 --preview='Write-Output {5}'
 
             if ($selected) {
                 $segments = $selected -split '\s*\|\s*'

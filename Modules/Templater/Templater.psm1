@@ -478,7 +478,7 @@ function Extract-Archive {
             { $_ -in @('.7z', '.rar', '.tar', '.gz', '.bz2', '.xz') } {
                 $sevenZip = Get-Trusted7ZipExecutable
                 if (-not $sevenZip) {
-                    throw "Trusted 7-Zip executable not found. Install 7-Zip via Setup-PowerShellMagic or set POWERSHELLMAGIC_7ZIP_PATH."
+                    throw 'Trusted 7-Zip executable not found. Install 7-Zip via Setup-PowerShellMagic or set POWERSHELLMAGIC_7ZIP_PATH.'
                 }
 
                 $archiveArg = "`"$ArchivePath`""

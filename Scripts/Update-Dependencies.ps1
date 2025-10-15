@@ -260,8 +260,8 @@ $DependencyUpdaters = @{
         Name = '7-Zip'
         GetLatestVersion = {
             # 7-Zip doesn't have a proper API, so we scrape the download page with a fallback mirror
-            $primaryUri = "https://www.7-zip.org/download.html"
-            $fallbackUri = "https://sourceforge.net/projects/sevenzip/files/7-Zip/"
+            $primaryUri = 'https://www.7-zip.org/download.html'
+            $fallbackUri = 'https://sourceforge.net/projects/sevenzip/files/7-Zip/'
             $pageContent = $null
 
             try {
@@ -323,7 +323,7 @@ function Get-CurrentDependencies {
     Parse the current dependencies from Setup-PowerShellMagic.ps1
     #>
 
-    $setupScript = Join-Path $PSScriptRoot "..\Setup-PowerShellMagic.ps1"
+    $setupScript = Join-Path $PSScriptRoot '..\Setup-PowerShellMagic.ps1'
     if (-not (Test-Path $setupScript)) {
         throw "Setup-PowerShellMagic.ps1 not found at: $setupScript"
     }
@@ -408,7 +408,7 @@ function Get-FileHash-Remote {
         }
 
         if (-not (Test-Path $tempFile)) {
-            throw "Download failed - file not created"
+            throw 'Download failed - file not created'
         }
 
         $hash = Get-FileHash -Path $tempFile -Algorithm SHA256 -ErrorAction Stop
@@ -431,7 +431,7 @@ function Test-DependencyUpdates {
     Check if any dependencies have updates available
     #>
 
-    Write-Info "Checking for dependency updates..."
+    Write-Info 'Checking for dependency updates...'
 
     $currentDeps = Get-CurrentDependencies
     $updatesAvailable = @{}
@@ -489,12 +489,12 @@ function Test-DependencyUpdates {
     # Save summary for GitHub Actions
     if ($summary.Count -gt 0) {
         $summaryText = $summary -join "`n"
-        Set-Content -Path "dependency-update-summary.txt" -Value $summaryText
-        $env:UPDATES_AVAILABLE = "true"
+        Set-Content -Path 'dependency-update-summary.txt' -Value $summaryText
+        $env:UPDATES_AVAILABLE = 'true'
         Write-Info "Updates available: $($updatesAvailable.Count) dependencies"
     } else {
-        $env:UPDATES_AVAILABLE = "false"
-        Write-Info "No updates available"
+        $env:UPDATES_AVAILABLE = 'false'
+        Write-Info 'No updates available'
     }
 
     return $updatesAvailable
@@ -509,13 +509,13 @@ function Update-SetupScript {
         [hashtable]$Updates
     )
 
-    $setupScript = Join-Path $PSScriptRoot "..\Setup-PowerShellMagic.ps1"
+    $setupScript = Join-Path $PSScriptRoot '..\Setup-PowerShellMagic.ps1'
 
     if (-not (Test-Path $setupScript)) {
         throw "Setup-PowerShellMagic.ps1 not found at: $setupScript"
     }
 
-    Write-Info "Updating Setup-PowerShellMagic.ps1..."
+    Write-Info 'Updating Setup-PowerShellMagic.ps1...'
 
     # Create backup
     $backupPath = "$setupScript.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
@@ -523,7 +523,7 @@ function Update-SetupScript {
     Write-Info "Backup created at: $backupPath"
 
     $content = Get-Content $setupScript -Raw
-    $templaterModulePath = Join-Path $PSScriptRoot "..\Modules\Templater\Templater.psm1"
+    $templaterModulePath = Join-Path $PSScriptRoot '..\Modules\Templater\Templater.psm1'
     $templaterContent = $null
     $templaterUpdated = $false
 
@@ -556,16 +556,16 @@ function Update-SetupScript {
 
             if ($templaterContent -ne $originalModuleContent) {
                 $templaterUpdated = $true
-                Write-Success "Updated Templater managed 7-Zip hash"
+                Write-Success 'Updated Templater managed 7-Zip hash'
             } else {
-                Write-Warning "Failed to update managed 7-Zip hash in Templater module automatically."
+                Write-Warning 'Failed to update managed 7-Zip hash in Templater module automatically.'
             }
         }
     }
 
     # Write updated content
     Set-Content -Path $setupScript -Value $content -Encoding UTF8
-    Write-Success "Setup script updated successfully"
+    Write-Success 'Setup script updated successfully'
 
     if ($templaterUpdated -and $templaterContent) {
         Set-Content -Path $templaterModulePath -Value $templaterContent -Encoding UTF8
@@ -575,34 +575,34 @@ function Update-SetupScript {
 function Main {
     try {
         if ($CheckOnly) {
-            Write-Info "Running in check-only mode..."
+            Write-Info 'Running in check-only mode...'
             $updates = Test-DependencyUpdates
 
             if ($updates.Count -gt 0) {
                 Write-Success "Found $($updates.Count) dependency updates available"
                 exit 0
             } else {
-                Write-Info "No dependency updates available"
+                Write-Info 'No dependency updates available'
                 exit 0
             }
         }
 
         if ($Apply) {
-            Write-Info "Applying dependency updates..."
+            Write-Info 'Applying dependency updates...'
             $updates = Test-DependencyUpdates
 
             if ($updates.Count -gt 0) {
                 Update-SetupScript -Updates $updates
-                Write-Success "All dependency updates applied successfully"
+                Write-Success 'All dependency updates applied successfully'
                 exit 0
             } else {
-                Write-Info "No updates to apply"
+                Write-Info 'No updates to apply'
                 exit 0
             }
         }
 
         # Default behavior: check for updates and show what would be done
-        Write-Info "Checking for available dependency updates..."
+        Write-Info 'Checking for available dependency updates...'
         $updates = Test-DependencyUpdates
 
         if ($updates.Count -gt 0) {
@@ -615,7 +615,7 @@ function Main {
             }
             Write-Host "`nRun with -Apply to update the setup script" -ForegroundColor Cyan
         } else {
-            Write-Success "All dependencies are up to date!"
+            Write-Success 'All dependencies are up to date!'
         }
 
     } catch {

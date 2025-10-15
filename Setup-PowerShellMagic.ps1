@@ -157,7 +157,7 @@ $Dependencies = @{
         Description = 'Modern ls replacement with better directory previews'
         TestCommand = @('eza', '--version')
         PortableUrl = 'https://github.com/eza-community/eza/releases/download/v0.23.4/eza.exe_x86_64-pc-windows-gnu.zip'
-        PortableSHA256 = '032963c3d47134d7976f8e17b0201efcff09fdcc7742d8a0db2135b38c8ce1f8'
+        PortableSHA256 = '05677FD7C2D1B69CE71DF53DB74C29F6331EA0B2BE5AA3A0FCE6976200EE06FC'
         PortableExe = 'eza.exe'
         ScoopPackage = 'eza'
         ChocoPackage = 'eza'
@@ -807,5 +807,4 @@ function Main {
 
 # Run main function
 Main
-
 
