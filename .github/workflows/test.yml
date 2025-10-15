@@ -192,18 +192,33 @@ jobs:
     strategy:
       matrix:
         os: [windows-latest, ubuntu-latest, macos-latest]
+    defaults:
+      run:
+        shell: pwsh
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v5
 
     - name: Show PowerShell environment
-      shell: pwsh
       run: |
         Write-Host "Operating System: $($PSVersionTable.OS)" -ForegroundColor Cyan
         Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)" -ForegroundColor Cyan
 
-    - name: Run cross-platform test suite
-      shell: pwsh
+    - name: Run unit tests
       run: |
+        Write-Host "Running platform-specific unit tests..." -ForegroundColor Cyan
+        ./Tests/Test-PowerShellMagic.ps1
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Unit tests failed"
+          exit $LASTEXITCODE
+        }
+
+    - name: Run cross-platform test suite
+      run: |
+        Write-Host "Running full CI test suite..." -ForegroundColor Cyan
         ./Run-Tests.ps1 -CI
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Cross-platform test suite failed"
+          exit $LASTEXITCODE
+        }
