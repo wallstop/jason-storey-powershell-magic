@@ -2,7 +2,8 @@
 
 **QuickJump** is your shortcut to lightning-fast directory navigation.
 Save paths with memorable aliases, organize them with categories, and jump
-to them instantly from anywhere in your terminal.
+to them instantly from anywhere in your terminal. It runs on Windows, macOS,
+and Linux—anywhere PowerShell 7 is available.
 
 ---
 
@@ -1161,12 +1162,12 @@ Get-QuickJumpConfigPath          # View config path
 
 **QuickJump makes directory navigation effortless:**
 
-✅ Save paths once, jump to them forever
-✅ Organize with categories
-✅ Track usage automatically
-✅ Fuzzy find with fzf
-✅ Use in scripts and automation
-✅ Share with your team
+- ✅ Save paths once and jump to them forever
+- ✅ Organize with categories
+- ✅ Track usage automatically
+- ✅ Fuzzy find with fzf
+- ✅ Use in scripts and automation
+- ✅ Share with your team
 
 **Start simple:** Save a few frequently-used paths.
 **Build gradually:** Add more as you work.

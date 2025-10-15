@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+#Requires -Version 7.0
 
 <#
 .SYNOPSIS
@@ -47,6 +47,11 @@ function Write-TestFailure { param($Message) Write-Host "[FAIL] $Message" -Foreg
 function Write-TestInfo { param($Message) Write-Host "[INFO] $Message" -ForegroundColor Cyan }
 function Write-TestWarning { param($Message) Write-Host "[WARN] $Message" -ForegroundColor Yellow }
 function Write-TestSkipped { param($Message) Write-Host "[SKIP] $Message" -ForegroundColor Gray }
+
+$script:IsWindowsPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)
+$script:IsMacOSPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::OSX)
+$script:IsLinuxPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Linux)
+$script:CurrentPlatformKey = if ($script:IsWindowsPlatform) { 'Windows' } elseif ($script:IsMacOSPlatform) { 'MacOS' } else { 'Linux' }
 
 function Assert-Equal {
     param($Expected, $Actual, $Message = 'Values should be equal')
@@ -147,6 +152,41 @@ function Test-FileHash {
     }
 }
 
+function Get-TemplaterManagedSevenZipHashes {
+    $modulePath = Join-Path $PSScriptRoot '..\Modules\Templater\Templater.psm1'
+
+    if (-not (Test-Path $modulePath)) {
+        Write-TestFailure "Templater module not found: $modulePath"
+        return @{}
+    }
+
+    try {
+        $content = Get-Content -Path $modulePath -Raw
+        $regex = [System.Text.RegularExpressions.Regex]::Match(
+            $content,
+            '\$script:ManagedSevenZipHashes\s*=\s*@\{(?<body>.*?)\}',
+            [System.Text.RegularExpressions.RegexOptions]::Singleline
+        )
+
+        if (-not $regex.Success) {
+            Write-TestFailure 'Failed to locate ManagedSevenZipHashes in Templater module'
+            return @{}
+        }
+
+        $hashes = @{}
+        foreach ($line in ($regex.Groups['body'].Value -split "`n")) {
+            if ($line -match "^\s*(\w+)\s*=\s*'([A-Fa-f0-9]{64})'") {
+                $hashes[$matches[1]] = $matches[2].ToUpper()
+            }
+        }
+
+        return $hashes
+    } catch {
+        Write-TestFailure "Failed to parse Templater managed hashes: $($_.Exception.Message)"
+        return @{}
+    }
+}
+
 function Download-File {
     param(
         [string]$Url,
@@ -212,34 +252,107 @@ function Test-DependencyConfiguration {
 
             Write-TestInfo "Checking dependency: $($dependency.Name)"
 
-            # Check if dependency has portable URL
-            if ($dependency.PortableUrl) {
+            $asset = $null
+            if ($dependency.PortableAssets -and $dependency.PortableAssets.ContainsKey($script:CurrentPlatformKey)) {
+                $asset = $dependency.PortableAssets[$script:CurrentPlatformKey]
+            }
+
+            if ($asset) {
                 $portableCount++
-                Assert-NotNull -Value $dependency.PortableUrl -Message "$($dependency.Name) has PortableUrl"
-                Assert-NotNull -Value $dependency.PortableSHA256 -Message "$($dependency.Name) has PortableSHA256"
+                Assert-NotNull -Value $asset.Url -Message "$($dependency.Name) has portable URL for $script:CurrentPlatformKey"
+                Assert-NotNull -Value $asset.Sha256 -Message "$($dependency.Name) has portable SHA256 for $script:CurrentPlatformKey"
 
                 # Validate URL format
                 $urlPattern = '^https?://.+'
-                $validUrl = $dependency.PortableUrl -match $urlPattern
-                Assert-True -Condition $validUrl -Message "$($dependency.Name) PortableUrl is valid HTTP/HTTPS URL"
+                $validUrl = $asset.Url -match $urlPattern
+                Assert-True -Condition $validUrl -Message "$($dependency.Name) portable URL is valid HTTP/HTTPS URL"
 
                 # Validate hash format (SHA256 should be 64 hex characters)
                 $hashPattern = '^[A-Fa-f0-9]{64}$'
-                $validHash = $dependency.PortableSHA256 -match $hashPattern
-                Assert-True -Condition $validHash -Message "$($dependency.Name) PortableSHA256 is valid 64-character hex string"
+                $validHash = $asset.Sha256 -match $hashPattern
+                Assert-True -Condition $validHash -Message "$($dependency.Name) portable SHA256 is valid 64-character hex string"
 
                 if ($Verbose) {
-                    Write-TestInfo "  URL: $($dependency.PortableUrl)"
-                    Write-TestInfo "  SHA256: $($dependency.PortableSHA256)"
+                    Write-TestInfo "  URL: $($asset.Url)"
+                    Write-TestInfo "  SHA256: $($asset.Sha256)"
                 }
+
+                if ($dependency.Name -eq '7-Zip') {
+                    $expectedPlatforms = @('Windows', 'MacOS', 'Linux')
+                    foreach ($platform in $expectedPlatforms) {
+                        Assert-True -Condition ($dependency.PortableAssets.ContainsKey($platform)) -Message "7-Zip defines portable asset for $platform"
+                        $platformAsset = $dependency.PortableAssets[$platform]
+                        Assert-NotNull -Value $platformAsset.Url -Message "7-Zip $platform asset has URL"
+                        Assert-NotNull -Value $platformAsset.Sha256 -Message "7-Zip $platform asset has SHA256"
+
+                        if ($platform -eq 'Windows') {
+                            Assert-Equal -Expected 'exe' -Actual $platformAsset.ArchiveType -Message '7-Zip Windows asset uses exe archive type'
+                            Assert-Equal -Expected '7z.exe' -Actual $platformAsset.Executable -Message '7-Zip Windows asset uses 7z.exe executable'
+                        } else {
+                            Assert-Equal -Expected 'tar.xz' -Actual $platformAsset.ArchiveType -Message "7-Zip $platform asset uses tar.xz archive type"
+                            Assert-Equal -Expected '7zz' -Actual $platformAsset.Executable -Message "7-Zip $platform asset uses 7zz executable"
+                        }
+                    }
+                }
+            } else {
+                Write-TestSkipped "$($dependency.Name) - No portable asset defined for $script:CurrentPlatformKey"
             }
         }
 
-        Write-TestInfo "Found $portableCount dependencies with portable URLs"
+        Write-TestInfo "Found $portableCount dependencies with portable assets for $script:CurrentPlatformKey"
+
+        if ($Dependencies.ContainsKey('7zip')) {
+            $templaterHashes = Get-TemplaterManagedSevenZipHashes
+
+            if ($templaterHashes.Count -gt 0) {
+                Write-TestInfo 'Validating Templater managed 7-Zip hashes align with setup script'
+                foreach ($platform in $templaterHashes.Keys) {
+                    Assert-True -Condition ($Dependencies['7zip'].PortableAssets.ContainsKey($platform)) `
+                        -Message "Setup defines 7-Zip portable asset for $platform"
+
+                    if ($Dependencies['7zip'].PortableAssets.ContainsKey($platform)) {
+                        $assetHash = $Dependencies['7zip'].PortableAssets[$platform].Sha256
+                        Assert-Equal -Expected $assetHash.ToUpper() -Actual $templaterHashes[$platform] `
+                            -Message "7-Zip $platform hash matches Templater managed hash"
+                    }
+                }
+            } else {
+                Write-TestWarning 'Skipped Templater managed hash validation (no hashes found)'
+            }
+        } else {
+            Write-TestWarning 'Skipped Templater managed hash validation (7-Zip dependency missing)'
+        }
+
         return $true
 
     } catch {
         Write-TestFailure "Failed to load dependencies configuration: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Test-PortableManifestExport {
+    Write-Host "`n=== Testing Portable Manifest Export ===" -ForegroundColor Yellow
+
+    $setupPath = Join-Path $PSScriptRoot '..\Setup-PowerShellMagic.ps1'
+
+    if (-not (Test-Path $setupPath)) {
+        Write-TestFailure "Setup script not found: $setupPath"
+        return $false
+    }
+
+    try {
+        $output = & $setupPath -ListPortableDownloads
+
+        $outputText = ($output | Out-String)
+        Assert-True -Condition ($outputText -match '7-Zip') `
+            -Message 'Manifest includes 7-Zip entry'
+        Assert-True -Condition ($outputText -match 'SHA256') `
+            -Message 'Manifest prints SHA256 values'
+
+        return $true
+    } catch {
+        Write-TestFailure "Portable manifest export failed: $($_.Exception.Message)"
         return $false
     }
 }
@@ -274,8 +387,14 @@ function Test-PortableDownloads {
         foreach ($dep in $Dependencies.Keys) {
             $dependency = $Dependencies[$dep]
 
-            if (-not $dependency.PortableUrl) {
-                Write-TestSkipped "$($dependency.Name) - No portable URL defined"
+            if (-not $dependency.PortableAssets -or -not $dependency.PortableAssets.ContainsKey($script:CurrentPlatformKey)) {
+                Write-TestSkipped "$($dependency.Name) - No portable asset defined for $script:CurrentPlatformKey"
+                continue
+            }
+
+            $asset = $dependency.PortableAssets[$script:CurrentPlatformKey]
+            if (-not $asset.Url) {
+                Write-TestSkipped "$($dependency.Name) - Portable asset missing URL for $script:CurrentPlatformKey"
                 continue
             }
 
@@ -283,7 +402,7 @@ function Test-PortableDownloads {
             Write-Host "`n--- Testing $($dependency.Name) ---" -ForegroundColor Cyan
 
             # Determine file extension from URL
-            $url = $dependency.PortableUrl
+            $url = $asset.Url
             $fileName = Split-Path $url -Leaf
             if (-not $fileName -or $fileName -eq '/') {
                 # Try to extract filename from URL
@@ -309,12 +428,16 @@ function Test-PortableDownloads {
                     Assert-True -Condition ($fileSize -gt 0) -Message "$($dependency.Name) downloaded file has content ($fileSize bytes)"
 
                     # Test hash validation
-                    Write-TestInfo "Validating SHA256 hash for $($dependency.Name)..."
-                    $hashValid = Test-FileHash -FilePath $downloadPath -ExpectedHash $dependency.PortableSHA256
-                    Assert-True -Condition $hashValid -Message "$($dependency.Name) SHA256 hash validation"
+                    if ($asset.Sha256) {
+                        Write-TestInfo "Validating SHA256 hash for $($dependency.Name)..."
+                        $hashValid = Test-FileHash -FilePath $downloadPath -ExpectedHash $asset.Sha256
+                        Assert-True -Condition $hashValid -Message "$($dependency.Name) SHA256 hash validation"
 
-                    if (-not $hashValid) {
-                        $allPassed = $false
+                        if (-not $hashValid) {
+                            $allPassed = $false
+                        }
+                    } else {
+                        Write-TestWarning "$($dependency.Name) portable asset for $script:CurrentPlatformKey lacks SHA256 hash; skipping hash validation"
                     }
                 } else {
                     Assert-True -Condition $false -Message "$($dependency.Name) file exists after download"
@@ -393,6 +516,9 @@ function Main {
     $configValid = Test-DependencyConfiguration
 
     if ($configValid) {
+        # Ensure manifest export stays in sync with setup metadata
+        $null = Test-PortableManifestExport
+
         # Test actual downloads and hash validation
         Test-PortableDownloads
     } else {
@@ -422,3 +548,7 @@ try {
     # Restore original location
     Set-Location $originalLocation
 }
+
+
+
+

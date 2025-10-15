@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+#Requires -Version 7.0
 
 <#
 .SYNOPSIS
@@ -245,15 +245,17 @@ $DependencyUpdaters = @{
     'fzf' = @{
         Name = 'fzf'
         GitHubRepo = 'junegunn/fzf'
-        AssetPattern = 'fzf-*-windows_amd64.zip'
-        CurrentUrlPattern = 'https://github.com/junegunn/fzf/releases/download/v*/fzf-*-windows_amd64.zip'
         GetLatestVersion = {
             $tag = Get-GitHubLatestReleaseTag -Repository 'junegunn/fzf'
             return $tag.TrimStart('v')
         }
-        BuildUrl = {
+        BuildPortableAssets = {
             param($Version)
-            return "https://github.com/junegunn/fzf/releases/download/v$Version/fzf-$Version-windows_amd64.zip"
+            return @{
+                Windows = @{
+                    Url = "https://github.com/junegunn/fzf/releases/download/v$Version/fzf-$Version-windows_amd64.zip"
+                }
+            }
         }
     }
     '7zip' = @{
@@ -296,23 +298,35 @@ $DependencyUpdaters = @{
             Write-WarningMessage 'Unable to parse 7-Zip version from download metadata.'
             return $null
         }
-        BuildUrl = {
+        BuildPortableAssets = {
             param($Version)
-            return "https://www.7-zip.org/a/7z$Version-x64.exe"
+            return @{
+                Windows = @{
+                    Url = "https://www.7-zip.org/a/7z$Version-x64.exe"
+                }
+                MacOS = @{
+                    Url = "https://www.7-zip.org/a/7z$Version-mac.tar.xz"
+                }
+                Linux = @{
+                    Url = "https://www.7-zip.org/a/7z$Version-linux-x64.tar.xz"
+                }
+            }
         }
     }
     'eza' = @{
         Name = 'eza'
         GitHubRepo = 'eza-community/eza'
-        AssetPattern = 'eza.exe_x86_64-pc-windows-gnu.zip'
-        CurrentUrlPattern = 'https://github.com/eza-community/eza/releases/download/v*/eza.exe_x86_64-pc-windows-gnu.zip'
         GetLatestVersion = {
             $tag = Get-GitHubLatestReleaseTag -Repository 'eza-community/eza'
             return $tag.TrimStart('v')
         }
-        BuildUrl = {
+        BuildPortableAssets = {
             param($Version)
-            return "https://github.com/eza-community/eza/releases/download/v$Version/eza.exe_x86_64-pc-windows-gnu.zip"
+            return @{
+                Windows = @{
+                    Url = "https://github.com/eza-community/eza/releases/download/v$Version/eza.exe_x86_64-pc-windows-gnu.zip"
+                }
+            }
         }
     }
 }
@@ -331,39 +345,100 @@ function Get-CurrentDependencies {
     $content = Get-Content $setupScript -Raw
     $dependencies = @{}
 
-    # Parse fzf dependency
-    if ($content -match "PortableUrl = '(https://github\.com/junegunn/fzf/releases/download/v([^/]+)/[^']+)'") {
-        $dependencies['fzf'] = @{
-            Url = $matches[1]
-            Version = $matches[2]
-        }
+    $singleLine = [System.Text.RegularExpressions.RegexOptions]::Singleline
 
-        if ($content -match "'fzf'[^}]+PortableSHA256 = '([A-F0-9]+)'") {
-            $dependencies['fzf'].SHA256 = $matches[1]
+    # Parse fzf dependency
+    $fzfMatch = [regex]::Match(
+        $content,
+        "'fzf'\s*=\s*@\{.*?PortableAssets\s*=\s*@\{.*?Windows\s*=\s*@\{.*?Url\s*=\s*'([^']+)'.*?Sha256\s*=\s*'([^']+)'",
+        $singleLine
+    )
+
+    if ($fzfMatch.Success) {
+        $fzfUrl = $fzfMatch.Groups[1].Value
+        $fzfHash = $fzfMatch.Groups[2].Value.ToUpper()
+        $fzfVersionMatch = [regex]::Match($fzfUrl, 'v([^/]+)/', $singleLine)
+
+        $dependencies['fzf'] = @{
+            Version = if ($fzfVersionMatch.Success) { $fzfVersionMatch.Groups[1].Value } else { 'unknown' }
+            PortableAssets = @{
+                Windows = @{
+                    Url = $fzfUrl
+                    SHA256 = $fzfHash
+                }
+            }
         }
     }
 
     # Parse 7-Zip dependency
-    if ($content -match "PortableUrl = '(https://www\.7-zip\.org/a/7z(\d+)-x64\.exe)'") {
-        $dependencies['7zip'] = @{
-            Url = $matches[1]
-            Version = $matches[2]
+    $sevenZipMatch = [regex]::Match(
+        $content,
+        "'7zip'\s*=\s*@\{.*?PortableAssets\s*=\s*@\{(?<assets>.*?)\}\s*\}",
+        $singleLine
+    )
+
+    if ($sevenZipMatch.Success) {
+        $assetSection = $sevenZipMatch.Groups['assets'].Value
+        $platforms = @('Windows', 'MacOS', 'Linux')
+        $portableAssets = @{}
+
+        foreach ($platform in $platforms) {
+            $platformMatch = [regex]::Match(
+                $assetSection,
+                "$platform\s*=\s*@\{.*?Url\s*=\s*'([^']+)'.*?Sha256\s*=\s*'([^']+)'",
+                $singleLine
+            )
+
+            if ($platformMatch.Success) {
+                $portableAssets[$platform] = @{
+                    Url = $platformMatch.Groups[1].Value
+                    SHA256 = $platformMatch.Groups[2].Value.ToUpper()
+                }
+            }
         }
 
-        if ($content -match "'7zip'[^}]+PortableSHA256 = '([A-F0-9]+)'") {
-            $dependencies['7zip'].SHA256 = $matches[1]
+        $versionSource = $null
+        if ($portableAssets.ContainsKey('Windows')) {
+            $versionSource = $portableAssets['Windows'].Url
+        } elseif ($portableAssets.Keys.Count -gt 0) {
+            $firstKey = ($portableAssets.Keys | Select-Object -First 1)
+            $versionSource = $portableAssets[$firstKey].Url
+        }
+
+        $sevenZipVersion = 'unknown'
+        if ($versionSource) {
+            $sevenZipVersionMatch = [regex]::Match($versionSource, '7z(?<version>\d+)-', $singleLine)
+            if ($sevenZipVersionMatch.Success) {
+                $sevenZipVersion = $sevenZipVersionMatch.Groups['version'].Value
+            }
+        }
+
+        $dependencies['7zip'] = @{
+            Version = $sevenZipVersion
+            PortableAssets = $portableAssets
         }
     }
 
     # Parse eza dependency
-    if ($content -match "PortableUrl = '(https://github\.com/eza-community/eza/releases/download/v([^/]+)/[^']+)'") {
-        $dependencies['eza'] = @{
-            Url = $matches[1]
-            Version = $matches[2]
-        }
+    $ezaMatch = [regex]::Match(
+        $content,
+        "'eza'\s*=\s*@\{.*?PortableAssets\s*=\s*@\{.*?Windows\s*=\s*@\{.*?Url\s*=\s*'([^']+)'.*?Sha256\s*=\s*'([^']+)'",
+        $singleLine
+    )
 
-        if ($content -match "'eza'[^}]+PortableSHA256 = '([a-f0-9]+)'") {
-            $dependencies['eza'].SHA256 = $matches[1].ToUpper()
+    if ($ezaMatch.Success) {
+        $ezaUrl = $ezaMatch.Groups[1].Value
+        $ezaHash = $ezaMatch.Groups[2].Value.ToUpper()
+        $ezaVersionMatch = [regex]::Match($ezaUrl, 'v([^/]+)/', $singleLine)
+
+        $dependencies['eza'] = @{
+            Version = if ($ezaVersionMatch.Success) { $ezaVersionMatch.Groups[1].Value } else { 'unknown' }
+            PortableAssets = @{
+                Windows = @{
+                    Url = $ezaUrl
+                    SHA256 = $ezaHash
+                }
+            }
         }
     }
 
@@ -458,25 +533,82 @@ function Test-DependencyUpdates {
 
             Write-Info "Current: $($currentDep.Version), Latest: $latestVersion"
 
-            if ($currentDep.Version -ne $latestVersion -or $Force) {
-                $newUrl = & $updater.BuildUrl $latestVersion
-                $newHash = Get-FileHash-Remote -Url $newUrl -DependencyName $updater.Name
+            if (-not $updater.ContainsKey('BuildPortableAssets')) {
+                throw "Dependency updater for $($updater.Name) must define BuildPortableAssets."
+            }
 
-                if ($newHash) {
+            $latestAssets = & $updater.BuildPortableAssets $latestVersion
+
+            $currentAssets = $currentDep.PortableAssets ?? @{}
+
+            $needsUpdate = ($currentDep.Version -ne $latestVersion) -or $Force
+
+            if (-not $needsUpdate) {
+                foreach ($platform in $latestAssets.Keys) {
+                    if (-not $currentAssets.ContainsKey($platform)) {
+                        continue
+                    }
+
+                    $currentAsset = $currentAssets[$platform]
+                    $latestAsset = $latestAssets[$platform]
+
+                    if ($null -eq $currentAsset -or $null -eq $latestAsset) {
+                        continue
+                    }
+
+                    if ($currentAsset.Url -ne $latestAsset.Url) {
+                        $needsUpdate = $true
+                        break
+                    }
+                }
+            }
+
+            if ($needsUpdate) {
+                $platformUpdates = @{}
+                $allHashesResolved = $true
+
+                foreach ($platform in $latestAssets.Keys) {
+                    if (-not $currentAssets.ContainsKey($platform)) {
+                        Write-WarningMessage "No current asset metadata for $($updater.Name) [$platform]; skipping update for this platform."
+                        continue
+                    }
+
+                    $currentAsset = $currentAssets[$platform]
+                    $latestAsset = $latestAssets[$platform]
+
+                    if (-not $latestAsset.Url) {
+                        Write-WarningMessage "No download URL available for $($updater.Name) [$platform]; skipping."
+                        continue
+                    }
+
+                    $newHash = Get-FileHash-Remote -Url $latestAsset.Url -DependencyName "$($updater.Name) [$platform]"
+                    if (-not $newHash) {
+                        $allHashesResolved = $false
+                        break
+                    }
+
+                    $platformUpdates[$platform] = @{
+                        CurrentUrl = $currentAsset.Url
+                        NewUrl = $latestAsset.Url
+                        CurrentHash = $currentAsset.SHA256
+                        NewHash = $newHash
+                    }
+                }
+
+                if ($allHashesResolved -and $platformUpdates.Count -gt 0) {
                     $updatesAvailable[$depKey] = @{
                         Name = $updater.Name
                         CurrentVersion = $currentDep.Version
                         LatestVersion = $latestVersion
-                        CurrentUrl = $currentDep.Url
-                        NewUrl = $newUrl
-                        CurrentHash = $currentDep.SHA256
-                        NewHash = $newHash
+                        PlatformUpdates = $platformUpdates
                     }
 
                     $summary += "- $($updater.Name): $($currentDep.Version) -> $latestVersion"
                     Write-Success "$($updater.Name) update available: $($currentDep.Version) -> $latestVersion"
+                } elseif (-not $allHashesResolved) {
+                    Write-ErrorMessage "Failed to verify new downloads for $($updater.Name); update aborted."
                 } else {
-                    Write-ErrorMessage "Failed to verify new version of $($updater.Name)"
+                    Write-Success "$($updater.Name) is up to date"
                 }
             } else {
                 Write-Success "$($updater.Name) is up to date"
@@ -529,14 +661,26 @@ function Update-SetupScript {
 
     foreach ($depKey in $Updates.Keys) {
         $update = $Updates[$depKey]
+        $platformUpdates = $update.PlatformUpdates
+
+        if (-not $platformUpdates -or $platformUpdates.Count -eq 0) {
+            continue
+        }
 
         Write-Info "Updating $($update.Name)..."
 
-        # Update URL
-        $content = $content.Replace($update.CurrentUrl, $update.NewUrl)
+        foreach ($platform in $platformUpdates.Keys) {
+            $platformUpdate = $platformUpdates[$platform]
+            if ($platformUpdate.CurrentUrl -and $platformUpdate.NewUrl) {
+                $content = $content.Replace($platformUpdate.CurrentUrl, $platformUpdate.NewUrl)
+            }
 
-        # Update SHA256 hash
-        $content = $content.Replace($update.CurrentHash, $update.NewHash)
+            if ($platformUpdate.CurrentHash -and $platformUpdate.NewHash) {
+                $content = $content.Replace($platformUpdate.CurrentHash, $platformUpdate.NewHash)
+            }
+
+            Write-Info "Updated $($update.Name) [$platform] download metadata"
+        }
 
         Write-Success "Updated $($update.Name): $($update.CurrentVersion) -> $($update.LatestVersion)"
 
@@ -545,20 +689,27 @@ function Update-SetupScript {
                 $templaterContent = Get-Content $templaterModulePath -Raw
             }
 
-            $originalModuleContent = $templaterContent
-            $newHashValue = $update.NewHash
-            $pattern = "(\$script:Managed7ZipHash = ')[A-F0-9]+'"
-            $templaterContent = [System.Text.RegularExpressions.Regex]::Replace(
-                $templaterContent,
-                $pattern,
-                { param($m) "{0}{1}'" -f $m.Groups[1].Value, $newHashValue }
-            )
+            foreach ($platform in $platformUpdates.Keys) {
+                $platformUpdate = $platformUpdates[$platform]
+                if (-not $platformUpdate.NewHash) {
+                    continue
+                }
 
-            if ($templaterContent -ne $originalModuleContent) {
-                $templaterUpdated = $true
-                Write-Success 'Updated Templater managed 7-Zip hash'
-            } else {
-                Write-Warning 'Failed to update managed 7-Zip hash in Templater module automatically.'
+                $pattern = "(${platform}\s*=\s*')[A-F0-9]+'"
+                $regex = New-Object System.Text.RegularExpressions.Regex($pattern)
+                $updatedContent = $regex.Replace(
+                    $templaterContent,
+                    { param($m) "{0}{1}'" -f $m.Groups[1].Value, $platformUpdate.NewHash },
+                    1
+                )
+
+                if ($updatedContent -ne $templaterContent) {
+                    $templaterContent = $updatedContent
+                    $templaterUpdated = $true
+                    Write-Info "Updated Templater managed 7-Zip hash for $platform"
+                } else {
+                    Write-Warning "Failed to update managed 7-Zip hash for $platform in Templater module automatically."
+                }
             }
         }
     }
@@ -610,8 +761,14 @@ function Main {
             foreach ($depKey in $updates.Keys) {
                 $update = $updates[$depKey]
                 Write-Host "  $($update.Name): $($update.CurrentVersion) -> $($update.LatestVersion)" -ForegroundColor Green
-                Write-Host "    URL: $($update.NewUrl)" -ForegroundColor Gray
-                Write-Host "    SHA256: $($update.NewHash)" -ForegroundColor Gray
+
+                if ($update.PlatformUpdates) {
+                    foreach ($platform in $update.PlatformUpdates.Keys) {
+                        $platformUpdate = $update.PlatformUpdates[$platform]
+                        Write-Host "    [$platform] URL: $($platformUpdate.NewUrl)" -ForegroundColor Gray
+                        Write-Host "    [$platform] SHA256: $($platformUpdate.NewHash)" -ForegroundColor Gray
+                    }
+                }
             }
             Write-Host "`nRun with -Apply to update the setup script" -ForegroundColor Cyan
         } else {
@@ -628,3 +785,6 @@ if ($MyInvocation.InvocationName -ne '.') {
     # Run main function when executed normally (not dot-sourced)
     Main
 }
+
+
+

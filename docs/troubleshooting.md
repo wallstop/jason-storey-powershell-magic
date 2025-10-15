@@ -236,21 +236,39 @@ Copy-Item $latest.FullName (Get-QuickJumpConfigPath) -Force
 
 **Solution:**
 
+#### Install 7-Zip / 7zz
+
+- **Windows:** `scoop install 7zip`, `choco install 7zip`, or
+  `winget install 7zip.7zip`
+- **macOS:** `brew install p7zip`
+- **Linux:** `sudo apt install p7zip-full`, `sudo dnf install p7zip`, or
+  `sudo pacman -S p7zip`
+
+> Verify manual downloads by running
+> `pwsh ./Setup-PowerShellMagic.ps1 -ListPortableDownloads` to view the official
+> URLs and SHA256 hashes, then confirm with `Get-FileHash` or `shasum -a 256`
+> before installing.
+
+#### Verify installation
+
 ```powershell
-# Install 7-Zip
-scoop install 7zip
-# OR
-choco install 7zip
-# OR
-winget install 7zip.7zip
+# Windows
+7z --help
 
-# Verify installation
-7z
+# macOS / Linux
+7zz --help
+```
 
-# Restart PowerShell
+#### Point Templater to your 7-Zip binary if needed
 
-# If 7-Zip is installed but not found
-$env:POWERSHELLMAGIC_7ZIP_PATH = "C:\Program Files\7-Zip\7z.exe"
+```powershell
+# Windows (default managed install)
+$env:POWERSHELLMAGIC_7ZIP_PATH = "$env:LOCALAPPDATA\PowerShellMagic\bin\7z.exe"
+
+# macOS / Linux (default managed install)
+$env:POWERSHELLMAGIC_7ZIP_PATH = "$HOME/.local/share/powershell-magic/bin/7zz"
+
+# Restart PowerShell after setting the path
 ```
 
 **Workaround:**
@@ -537,34 +555,40 @@ Add-Content $PROFILE '$env:PATH += ";C:\Path\To\fzf"'
 
 ### 7-Zip issues
 
-**Installation:**
+#### Installation
+
+- **Windows:** `scoop install 7zip`, `choco install 7zip`, or
+  `winget install 7zip.7zip`
+- **macOS:** `brew install p7zip`
+- **Linux:** `sudo apt install p7zip-full`, `sudo dnf install p7zip`, or
+  `sudo pacman -S p7zip`
+- **Manual:** download direct binaries from <https://www.7-zip.org/> (ships
+  `7z.exe` on Windows and `7zz` elsewhere)
+
+> Verify manual downloads by running
+> `pwsh ./Setup-PowerShellMagic.ps1 -ListPortableDownloads` to view the official
+> URLs and SHA256 hashes, then confirm with `Get-FileHash` or `shasum -a 256`
+> before installing.
+
+#### Verification
 
 ```powershell
-# Scoop
-scoop install 7zip
+# Windows
+7z --help
 
-# Chocolatey
-choco install 7zip
-
-# Winget
-winget install 7zip.7zip
-
-# Manual
-# Download from: https://www.7-zip.org/
+# macOS / Linux
+7zz --help
 ```
 
-**Verification:**
+#### Custom path
 
 ```powershell
-7z
-# Should show 7-Zip help
-```
-
-**Custom path:**
-
-```powershell
-# If 7-Zip is in non-standard location
+# Point to a custom install location if auto-detection fails
+# Windows example
 $env:POWERSHELLMAGIC_7ZIP_PATH = "C:\Custom\Path\7z.exe"
+
+# macOS/Linux managed install
+$env:POWERSHELLMAGIC_7ZIP_PATH = "$HOME/.local/share/powershell-magic/bin/7zz"
 ```
 
 ---
@@ -722,7 +746,7 @@ Get-Content $PROFILE
 |---------|-----------|
 | Commands not found | `Import-Module QuickJump -Force; Restart PowerShell` |
 | fzf not working | `scoop install fzf; Restart PowerShell` |
-| 7-Zip not found | `scoop install 7zip; Restart PowerShell` |
+| 7-Zip not found | Install 7-Zip/7zz (per OS); Restart PowerShell |
 | Config corrupted | `Copy backup file; Restart PowerShell` |
 | Execution policy | `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser` |
 | Module import fails | `.\Setup-PowerShellMagic.ps1 -Force` |

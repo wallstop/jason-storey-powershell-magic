@@ -4,6 +4,14 @@ using namespace System.Collections.Generic
 # Module variables
 $script:QuickJumpConfigCache = $null
 $script:QuickJumpConfigTimestamp = $null
+$script:PwshExecutable = try {
+    [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+} catch {
+    $null
+}
+if (-not $script:PwshExecutable -or [string]::IsNullOrWhiteSpace($script:PwshExecutable)) {
+    $script:PwshExecutable = 'pwsh'
+}
 
 function New-QuickJumpConfig {
     return @{
@@ -681,9 +689,14 @@ function Get-QuickJumpPaths {
             if ($displayPath.Length -gt 60) {
                 $pathParts = $displayPath -split '[\\/]'
                 if ($pathParts.Length -gt 3) {
-                    $drive = $pathParts[0]
-                    $lastParts = $pathParts[-2..-1] -join '\\'
-                    $displayPath = "$drive\[...]\$lastParts"
+                    $separator = if ($displayPath -match '/') { '/' } else { '\' }
+                    $drive = if ($displayPath -match '^(/|\\)') { $separator } else { $pathParts[0] }
+                    $lastParts = $pathParts[-2..-1] -join $separator
+                    if ($drive -eq $separator) {
+                        $displayPath = "$drive[...]$separator$lastParts"
+                    } else {
+                        $displayPath = "$drive$separator[...]$separator$lastParts"
+                    }
                 }
             }
 
@@ -694,7 +707,20 @@ function Get-QuickJumpPaths {
             $headerText = if ($Path) { 'Select Path (will return path)' } else { 'Select Path to Jump To' }
             if ($Category) { $headerText += " - Category: $Category" }
 
-            $selected = $fzfItems | & fzf --height=60% --reverse --border --header="$headerText" --delimiter="|" --with-nth="1,2,3" --preview="powershell -c `"if (Get-Command eza -ErrorAction SilentlyContinue) { eza -la '{4}' } elseif (Get-Command ls -ErrorAction SilentlyContinue) { ls -la '{4}' } else { Get-ChildItem '{4}' }`""
+            $pwshCommand = $script:PwshExecutable
+            $escapedPwsh = if ($pwshCommand -match '\s') { "`"$pwshCommand`"" } else { $pwshCommand }
+            $previewCommand = "$escapedPwsh -NoLogo -NoProfile -Command `"if (Get-Command eza -ErrorAction SilentlyContinue) { eza -la '{4}' } elseif (Get-Command ls -ErrorAction SilentlyContinue) { ls -la '{4}' } else { Get-ChildItem '{4}' }`""
+            $fzfArgs = @(
+                '--height=60%',
+                '--reverse',
+                '--border',
+                "--header=$headerText",
+                '--delimiter=|',
+                '--with-nth=1,2,3',
+                "--preview=$previewCommand"
+            )
+
+            $selected = $fzfItems | & fzf @fzfArgs
 
             if ($selected) {
                 $selectedPath = ($selected -split ' \| ')[-1].Trim()
