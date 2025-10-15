@@ -33,18 +33,33 @@ Yes! PowerShell Magic is:
 - ✅ Reversible - easy to uninstall
 - ✅ Automatic backups - configs backed up before changes
 
-### Does it work on Mac or Linux?
+### Does it work on macOS or Linux?
 
-Currently Windows only. PowerShell Core support for Mac/Linux is possible in the
-future.
+Yes! PowerShell Magic now supports Windows, macOS, and Linux as long as you're
+running PowerShell 7 or newer. The setup script automatically detects your
+platform and uses the right install location and package managers:
 
-### What Windows versions are supported?
+- **Windows:** Stores files in `%LOCALAPPDATA%\PowerShellMagic` and offers to use
+  winget, Scoop, or Chocolatey.
+- **macOS:** Uses the XDG-compliant path `~/.local/share/powershell-magic` and
+  leverages Homebrew if available.
+- **Linux:** Installs under `~/.local/share/powershell-magic` and supports apt,
+  dnf, or pacman when they're present.
 
-- Windows 10 (all versions)
-- Windows 11
+Install PowerShell 7 first if you don't already have it:
+
+- [Install PowerShell on Windows, macOS, or Linux](https://learn.microsoft.com/powershell/scripting/install/installing-powershell)
+- [Download the latest PowerShell 7 release](https://github.com/PowerShell/PowerShell/releases)
+
+### Which platforms are supported?
+
+- Windows 10/11
 - Windows Server 2016+
+- macOS 12+ (Intel or Apple Silicon)
+- Linux distributions with PowerShell 7 support (e.g., Ubuntu 20.04+, Fedora 38+,
+  Arch/Manjaro)
 
-Requires PowerShell 5.1 or higher (included in Windows).
+PowerShell 7.0 or higher is required on every platform.
 
 ---
 

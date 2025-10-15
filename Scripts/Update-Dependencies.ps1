@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+#Requires -Version 7.0
 
 <#
 .SYNOPSIS
@@ -331,39 +331,62 @@ function Get-CurrentDependencies {
     $content = Get-Content $setupScript -Raw
     $dependencies = @{}
 
-    # Parse fzf dependency
-    if ($content -match "PortableUrl = '(https://github\.com/junegunn/fzf/releases/download/v([^/]+)/[^']+)'") {
-        $dependencies['fzf'] = @{
-            Url = $matches[1]
-            Version = $matches[2]
-        }
+    $singleLine = [System.Text.RegularExpressions.RegexOptions]::Singleline
 
-        if ($content -match "'fzf'[^}]+PortableSHA256 = '([A-F0-9]+)'") {
-            $dependencies['fzf'].SHA256 = $matches[1]
+    # Parse fzf dependency
+    $fzfMatch = [regex]::Match(
+        $content,
+        "'fzf'\s*=\s*@\{.*?PortableAssets\s*=\s*@\{.*?Windows\s*=\s*@\{.*?Url\s*=\s*'([^']+)'.*?Sha256\s*=\s*'([^']+)'",
+        $singleLine
+    )
+
+    if ($fzfMatch.Success) {
+        $fzfUrl = $fzfMatch.Groups[1].Value
+        $fzfHash = $fzfMatch.Groups[2].Value
+        $fzfVersionMatch = [regex]::Match($fzfUrl, 'v([^/]+)/', $singleLine)
+
+        $dependencies['fzf'] = @{
+            Url = $fzfUrl
+            Version = if ($fzfVersionMatch.Success) { $fzfVersionMatch.Groups[1].Value } else { 'unknown' }
+            SHA256 = $fzfHash
         }
     }
 
     # Parse 7-Zip dependency
-    if ($content -match "PortableUrl = '(https://www\.7-zip\.org/a/7z(\d+)-x64\.exe)'") {
-        $dependencies['7zip'] = @{
-            Url = $matches[1]
-            Version = $matches[2]
-        }
+    $sevenZipMatch = [regex]::Match(
+        $content,
+        "'7zip'\s*=\s*@\{.*?PortableAssets\s*=\s*@\{.*?Windows\s*=\s*@\{.*?Url\s*=\s*'([^']+)'.*?Sha256\s*=\s*'([^']+)'",
+        $singleLine
+    )
 
-        if ($content -match "'7zip'[^}]+PortableSHA256 = '([A-F0-9]+)'") {
-            $dependencies['7zip'].SHA256 = $matches[1]
+    if ($sevenZipMatch.Success) {
+        $sevenZipUrl = $sevenZipMatch.Groups[1].Value
+        $sevenZipHash = $sevenZipMatch.Groups[2].Value
+        $sevenZipVersionMatch = [regex]::Match($sevenZipUrl, '7z(\d+)-x64\.exe', $singleLine)
+
+        $dependencies['7zip'] = @{
+            Url = $sevenZipUrl
+            Version = if ($sevenZipVersionMatch.Success) { $sevenZipVersionMatch.Groups[1].Value } else { 'unknown' }
+            SHA256 = $sevenZipHash
         }
     }
 
     # Parse eza dependency
-    if ($content -match "PortableUrl = '(https://github\.com/eza-community/eza/releases/download/v([^/]+)/[^']+)'") {
-        $dependencies['eza'] = @{
-            Url = $matches[1]
-            Version = $matches[2]
-        }
+    $ezaMatch = [regex]::Match(
+        $content,
+        "'eza'\s*=\s*@\{.*?PortableAssets\s*=\s*@\{.*?Windows\s*=\s*@\{.*?Url\s*=\s*'([^']+)'.*?Sha256\s*=\s*'([^']+)'",
+        $singleLine
+    )
 
-        if ($content -match "'eza'[^}]+PortableSHA256 = '([a-f0-9]+)'") {
-            $dependencies['eza'].SHA256 = $matches[1].ToUpper()
+    if ($ezaMatch.Success) {
+        $ezaUrl = $ezaMatch.Groups[1].Value
+        $ezaHash = $ezaMatch.Groups[2].Value.ToUpper()
+        $ezaVersionMatch = [regex]::Match($ezaUrl, 'v([^/]+)/', $singleLine)
+
+        $dependencies['eza'] = @{
+            Url = $ezaUrl
+            Version = if ($ezaVersionMatch.Success) { $ezaVersionMatch.Groups[1].Value } else { 'unknown' }
+            SHA256 = $ezaHash
         }
     }
 
@@ -628,3 +651,4 @@ if ($MyInvocation.InvocationName -ne '.') {
     # Run main function when executed normally (not dot-sourced)
     Main
 }
+

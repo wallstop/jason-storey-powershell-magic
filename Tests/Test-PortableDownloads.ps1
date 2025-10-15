@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+#Requires -Version 7.0
 
 <#
 .SYNOPSIS
@@ -47,6 +47,11 @@ function Write-TestFailure { param($Message) Write-Host "[FAIL] $Message" -Foreg
 function Write-TestInfo { param($Message) Write-Host "[INFO] $Message" -ForegroundColor Cyan }
 function Write-TestWarning { param($Message) Write-Host "[WARN] $Message" -ForegroundColor Yellow }
 function Write-TestSkipped { param($Message) Write-Host "[SKIP] $Message" -ForegroundColor Gray }
+
+$script:IsWindowsPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)
+$script:IsMacOSPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::OSX)
+$script:IsLinuxPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Linux)
+$script:CurrentPlatformKey = if ($script:IsWindowsPlatform) { 'Windows' } elseif ($script:IsMacOSPlatform) { 'MacOS' } else { 'Linux' }
 
 function Assert-Equal {
     param($Expected, $Actual, $Message = 'Values should be equal')
@@ -212,30 +217,36 @@ function Test-DependencyConfiguration {
 
             Write-TestInfo "Checking dependency: $($dependency.Name)"
 
-            # Check if dependency has portable URL
-            if ($dependency.PortableUrl) {
+            $asset = $null
+            if ($dependency.PortableAssets -and $dependency.PortableAssets.ContainsKey($script:CurrentPlatformKey)) {
+                $asset = $dependency.PortableAssets[$script:CurrentPlatformKey]
+            }
+
+            if ($asset) {
                 $portableCount++
-                Assert-NotNull -Value $dependency.PortableUrl -Message "$($dependency.Name) has PortableUrl"
-                Assert-NotNull -Value $dependency.PortableSHA256 -Message "$($dependency.Name) has PortableSHA256"
+                Assert-NotNull -Value $asset.Url -Message "$($dependency.Name) has portable URL for $script:CurrentPlatformKey"
+                Assert-NotNull -Value $asset.Sha256 -Message "$($dependency.Name) has portable SHA256 for $script:CurrentPlatformKey"
 
                 # Validate URL format
                 $urlPattern = '^https?://.+'
-                $validUrl = $dependency.PortableUrl -match $urlPattern
-                Assert-True -Condition $validUrl -Message "$($dependency.Name) PortableUrl is valid HTTP/HTTPS URL"
+                $validUrl = $asset.Url -match $urlPattern
+                Assert-True -Condition $validUrl -Message "$($dependency.Name) portable URL is valid HTTP/HTTPS URL"
 
                 # Validate hash format (SHA256 should be 64 hex characters)
                 $hashPattern = '^[A-Fa-f0-9]{64}$'
-                $validHash = $dependency.PortableSHA256 -match $hashPattern
-                Assert-True -Condition $validHash -Message "$($dependency.Name) PortableSHA256 is valid 64-character hex string"
+                $validHash = $asset.Sha256 -match $hashPattern
+                Assert-True -Condition $validHash -Message "$($dependency.Name) portable SHA256 is valid 64-character hex string"
 
                 if ($Verbose) {
-                    Write-TestInfo "  URL: $($dependency.PortableUrl)"
-                    Write-TestInfo "  SHA256: $($dependency.PortableSHA256)"
+                    Write-TestInfo "  URL: $($asset.Url)"
+                    Write-TestInfo "  SHA256: $($asset.Sha256)"
                 }
+            } else {
+                Write-TestSkipped "$($dependency.Name) - No portable asset defined for $script:CurrentPlatformKey"
             }
         }
 
-        Write-TestInfo "Found $portableCount dependencies with portable URLs"
+        Write-TestInfo "Found $portableCount dependencies with portable assets for $script:CurrentPlatformKey"
         return $true
 
     } catch {
@@ -274,8 +285,14 @@ function Test-PortableDownloads {
         foreach ($dep in $Dependencies.Keys) {
             $dependency = $Dependencies[$dep]
 
-            if (-not $dependency.PortableUrl) {
-                Write-TestSkipped "$($dependency.Name) - No portable URL defined"
+            if (-not $dependency.PortableAssets -or -not $dependency.PortableAssets.ContainsKey($script:CurrentPlatformKey)) {
+                Write-TestSkipped "$($dependency.Name) - No portable asset defined for $script:CurrentPlatformKey"
+                continue
+            }
+
+            $asset = $dependency.PortableAssets[$script:CurrentPlatformKey]
+            if (-not $asset.Url) {
+                Write-TestSkipped "$($dependency.Name) - Portable asset missing URL for $script:CurrentPlatformKey"
                 continue
             }
 
@@ -283,7 +300,7 @@ function Test-PortableDownloads {
             Write-Host "`n--- Testing $($dependency.Name) ---" -ForegroundColor Cyan
 
             # Determine file extension from URL
-            $url = $dependency.PortableUrl
+            $url = $asset.Url
             $fileName = Split-Path $url -Leaf
             if (-not $fileName -or $fileName -eq '/') {
                 # Try to extract filename from URL
@@ -309,12 +326,16 @@ function Test-PortableDownloads {
                     Assert-True -Condition ($fileSize -gt 0) -Message "$($dependency.Name) downloaded file has content ($fileSize bytes)"
 
                     # Test hash validation
-                    Write-TestInfo "Validating SHA256 hash for $($dependency.Name)..."
-                    $hashValid = Test-FileHash -FilePath $downloadPath -ExpectedHash $dependency.PortableSHA256
-                    Assert-True -Condition $hashValid -Message "$($dependency.Name) SHA256 hash validation"
+                    if ($asset.Sha256) {
+                        Write-TestInfo "Validating SHA256 hash for $($dependency.Name)..."
+                        $hashValid = Test-FileHash -FilePath $downloadPath -ExpectedHash $asset.Sha256
+                        Assert-True -Condition $hashValid -Message "$($dependency.Name) SHA256 hash validation"
 
-                    if (-not $hashValid) {
-                        $allPassed = $false
+                        if (-not $hashValid) {
+                            $allPassed = $false
+                        }
+                    } else {
+                        Write-TestWarning "$($dependency.Name) portable asset for $script:CurrentPlatformKey lacks SHA256 hash; skipping hash validation"
                     }
                 } else {
                     Assert-True -Condition $false -Message "$($dependency.Name) file exists after download"
@@ -422,3 +443,4 @@ try {
     # Restore original location
     Set-Location $originalLocation
 }
+

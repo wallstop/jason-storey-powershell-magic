@@ -59,11 +59,14 @@ and managing Unity games much faster and easier through your command line.
 
 ### Key Benefits
 
-✅ **Save Time** - Navigate anywhere in 1-2 keystrokes instead of dozens
-✅ **Consistency** - Use the same project structure every time with templates
-✅ **No More Searching** - All your important paths saved with memorable names
-✅ **Fuzzy Finding** - Type partial names, instantly find what you need
-✅ **Track Usage** - See which folders you use most, jump to recent locations
+- ✅ **Save Time** — Navigate anywhere in one or two keystrokes instead of
+  dozens.
+- ✅ **Consistency** — Use the same project structure every time with
+  templates.
+- ✅ **No More Searching** — Keep important paths saved with memorable names.
+- ✅ **Fuzzy Finding** — Type partial names and instantly find what you need.
+- ✅ **Track Usage** — See which folders you use most and jump to recent
+  locations.
 
 ---
 
@@ -76,10 +79,14 @@ and managing Unity games much faster and easier through your command line.
 git clone https://github.com/your-username/powershell-magic.git
 cd powershell-magic
 
-# 2. Run the setup script (completely safe, asks permission for everything)
+# 2. Run the setup script (PowerShell 7 required, prompts before changes)
+#    Windows
 .\Setup-PowerShellMagic.ps1
 
-# 3. Restart PowerShell - you're ready to go! 🎉
+#    macOS / Linux
+pwsh -NoLogo -NoProfile -File ./Setup-PowerShellMagic.ps1
+
+# 3. Restart your shell - you're ready to go! 🎉
 ```
 
 **The setup script will:**
@@ -88,6 +95,8 @@ cd powershell-magic
 - ✅ Create automatic backups of your PowerShell profile
 - ✅ Install optional tools (fzf, 7-Zip, eza) with your consent
 - ✅ Show exactly what it's doing at each step
+- ✅ Use winget/scoop/choco on Windows or Homebrew/apt/dnf/pacman on
+  macOS/Linux when available
 
 **→ [Full Installation Guide](docs/installation.md)**
 
@@ -546,16 +555,18 @@ You save it as a template once, then deploy it instantly for new projects:
 <details>
 <summary><b>What is PowerShell?</b></summary>
 
-**PowerShell** is a command-line interface (CLI) for Windows. It's like a more
-powerful version of the old "Command Prompt".
+**PowerShell** is a cross-platform command-line shell and scripting language.
+It ships with Windows and can be installed on macOS or Linux through the
+official PowerShell 7 packages.
 
-You type commands to control your computer, instead of clicking with your
-mouse. It's faster and more powerful once you learn the basics!
+You type commands to control your computer instead of clicking with your mouse.
+It's faster and more powerful once you learn the basics!
 
 **Opening PowerShell:**
 
-- Press `Windows + X`, then select "Windows PowerShell" or "Terminal"
-- Or search for "PowerShell" in the Start Menu
+- **Windows:** Press `Windows + X`, then select "Windows PowerShell" or
+  "Terminal", or search for "PowerShell" in the Start Menu.
+- **macOS / Linux:** Install PowerShell 7, then run `pwsh` from your terminal.
 
 </details>
 
@@ -569,13 +580,13 @@ mouse. It's faster and more powerful once you learn the basics!
 
 **PowerShell Magic is designed with safety first:**
 
-✅ **No automatic changes** - Everything requires explicit
-  `YES` confirmation
-✅ **Automatic backups** - Your PowerShell profile is backed up before
-  modifications
-✅ **User-level only** - No administrator/elevated privileges required
-✅ **Transparent operations** - Shows exactly what will be done before doing it
-✅ **Fully reversible** - Easy uninstall process
+- ✅ **No automatic changes** — Everything requires explicit `YES` confirmation.
+- ✅ **Automatic backups** — Your PowerShell profile is backed up before
+  modifications.
+- ✅ **User-level only** — No administrator or elevated privileges required.
+- ✅ **Transparent operations** — The script shows planned actions before it
+  runs them.
+- ✅ **Fully reversible** — Uninstall in one step if you ever want to remove it.
 
 ### Data & Privacy
 
@@ -810,16 +821,31 @@ improving documentation.
 
 ## 📋 Requirements Summary
 
-| Component | Requirement | Notes |
-|-----------|-------------|-------|
-| **OS** | Windows 10/11+ | Windows Server 2016+ also supported |
-| **PowerShell** | 5.1 or higher | Usually pre-installed on Windows |
-| **fzf** | Optional | Highly recommended for interactive features |
-| **7-Zip** | Optional | Required only for Templater archive support |
-| **eza** | Optional | Nice to have for enhanced previews |
-| **Unity Hub** | Optional | Required only for Unitea module |
+- **Operating System**
+  - Windows: Windows 10/11 or Windows Server 2016+.
+  - macOS / Linux: macOS 12+ (Intel or Apple Silicon) or a modern Linux
+    distribution such as Ubuntu 20.04+, Fedora 38+, or Arch/Manjaro.
+- **PowerShell**
+  - Windows: PowerShell 7.0+ is required.
+  - macOS / Linux: Install PowerShell 7.0+ with `brew install powershell`,
+    `sudo apt-get install powershell`, `sudo dnf install powershell`, or
+    `sudo pacman -S powershell`.
+- **fzf**
+  - Optional everywhere. On Windows install via winget, Scoop, or Chocolatey.
+    On macOS or Linux use Homebrew, apt, dnf, or pacman.
+- **7-Zip / p7zip**
+  - Optional and needed only for Templater archive support. Install `p7zip`
+    through your platform package manager.
+- **eza**
+  - Optional quality-of-life upgrade for enhanced previews. Install via the
+    same package managers listed above.
+- **Unity Hub**
+  - Optional and only required for the Unitea module. Ensure Unity Hub
+    (`unityhub` or AppImage) is installed if you plan to use Unitea.
 
-**All optional tools can be installed automatically by the setup script.**
+**The setup script uses winget, Scoop, or Chocolatey on Windows and Homebrew,
+apt, dnf, or pacman on macOS/Linux when available. It always prompts before
+installing anything.**
 
 ---
 

@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+#Requires -Version 7.0
 
 <#
 .SYNOPSIS
@@ -525,14 +525,17 @@ function Test-Templater {
             $templaterCopyPath = Join-Path $updateTestRoot 'Modules\Templater\Templater.psm1'
 
             $setupCopyContent = Get-Content -Path $setupCopyPath -Raw
-            $currentUrlMatch = [regex]::Match($setupCopyContent, "'7zip'\s*=\s*@\{.*?PortableUrl\s*=\s*'([^']+)'", [System.Text.RegularExpressions.RegexOptions]::Singleline)
-            $currentHashMatch = [regex]::Match($setupCopyContent, "'7zip'\s*=\s*@\{.*?PortableSHA256\s*=\s*'([^']+)'", [System.Text.RegularExpressions.RegexOptions]::Singleline)
+            $currentAssetMatch = [regex]::Match(
+                $setupCopyContent,
+                "'7zip'\s*=\s*@\{.*?PortableAssets\s*=\s*@\{.*?Windows\s*=\s*@\{.*?Url\s*=\s*'([^']+)'.*?Sha256\s*=\s*'([^']+)'",
+                [System.Text.RegularExpressions.RegexOptions]::Singleline
+            )
 
-            if (-not ($currentUrlMatch.Success -and $currentHashMatch.Success)) {
+            if (-not $currentAssetMatch.Success) {
                 Assert-True -Condition $false -Message 'Dependency updater test could not locate 7-Zip metadata in setup script copy'
             } else {
-                $currentPortableUrl = $currentUrlMatch.Groups[1].Value
-                $currentPortableHash = $currentHashMatch.Groups[1].Value
+                $currentPortableUrl = $currentAssetMatch.Groups[1].Value
+                $currentPortableHash = $currentAssetMatch.Groups[2].Value
                 $newPortableUrl = "$currentPortableUrl?updated=1"
                 $newPortableHash = '0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF'
 

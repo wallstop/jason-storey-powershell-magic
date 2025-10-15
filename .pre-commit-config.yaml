@@ -7,8 +7,8 @@ repos:
     hooks:
       - id: powershell-format
         name: PowerShell Formatter
-        entry: powershell.exe
-        args: ['-ExecutionPolicy', 'Bypass', '-File', './Format-PowerShell.ps1', '-Check']
+        entry: pwsh
+        args: ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', './Format-PowerShell.ps1', '-Check']
         language: system
         files: '\.(ps1|psm1|psd1)$'
         pass_filenames: false
@@ -16,8 +16,8 @@ repos:
 
       - id: powershell-tests
         name: PowerShell Tests
-        entry: powershell.exe
-        args: ['-ExecutionPolicy', 'Bypass', '-File', './Run-Tests.ps1', '-Test']
+        entry: pwsh
+        args: ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', './Run-Tests.ps1', '-Test']
         language: system
         files: '\.(ps1|psm1|psd1)$'
         pass_filenames: false

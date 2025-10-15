@@ -4,6 +4,289 @@ using namespace System.Collections.Generic
 $script:UnityProjectsCache = $null
 $script:UnityProjectsTimestamp = $null
 
+$script:IsWindows = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)
+$script:IsMacOS = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::OSX)
+$script:IsLinux = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Linux)
+
+function Join-PathSegments {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Segments
+    )
+
+    if (-not $Segments -or $Segments.Count -eq 0) {
+        return [string]::Empty
+    }
+
+    $path = $Segments[0]
+    for ($i = 1; $i -lt $Segments.Count; $i++) {
+        $segment = $Segments[$i]
+        if ([string]::IsNullOrWhiteSpace($segment)) {
+            continue
+        }
+        $path = Join-Path $path $segment
+    }
+
+    return $path
+}
+
+function Get-UnityHubDefaultPath {
+    if ($script:IsWindows) {
+        return 'C:\Program Files\Unity Hub\Unity Hub.exe'
+    }
+
+    if ($script:IsMacOS) {
+        $candidates = @(
+            '/Applications/Unity Hub.app/Contents/MacOS/Unity Hub',
+            '/Applications/UnityHub.app/Contents/MacOS/Unity Hub'
+        )
+        foreach ($candidate in $candidates) {
+            if (Test-Path $candidate) {
+                return $candidate
+            }
+        }
+        return 'unityhub'
+    }
+
+    if ($script:IsLinux) {
+        $home = $env:HOME
+        $candidates = @(
+            '/usr/bin/unityhub',
+            '/usr/local/bin/unityhub',
+            '/opt/unityhub/unityhub',
+            '/opt/UnityHub/unityhub',
+            (Join-PathSegments -Segments @($home, 'UnityHub', 'UnityHub.AppImage')),
+            (Join-PathSegments -Segments @($home, 'Applications', 'UnityHub.AppImage'))
+        ) | Where-Object { $_ }
+
+        foreach ($candidate in $candidates) {
+            if (Test-Path $candidate) {
+                return $candidate
+            }
+        }
+
+        return 'unityhub'
+    }
+
+    return 'unityhub'
+}
+
+function Get-UnityEditorBasePaths {
+    $paths = New-Object System.Collections.Generic.List[string]
+
+    if ($script:IsWindows) {
+        $programFiles = $env:ProgramFiles
+        $programFilesX86 = ${env:ProgramFiles(x86)}
+
+        if ($programFiles) {
+            $paths.Add((Join-PathSegments -Segments @($programFiles, 'Unity', 'Hub', 'Editor')))
+            $paths.Add((Join-PathSegments -Segments @($programFiles, 'Unity')))
+        }
+
+        if ($programFilesX86) {
+            $paths.Add((Join-PathSegments -Segments @($programFilesX86, 'Unity')))
+            $paths.Add((Join-PathSegments -Segments @($programFilesX86, 'Unity Hub', 'Editor')))
+        }
+    } elseif ($script:IsMacOS) {
+        $paths.Add('/Applications/Unity/Hub/Editor')
+        $paths.Add('/Applications/Unity')
+
+        if ($env:HOME) {
+            $paths.Add((Join-PathSegments -Segments @($env:HOME, 'Applications', 'Unity', 'Hub', 'Editor')))
+            $paths.Add((Join-PathSegments -Segments @($env:HOME, 'Unity', 'Hub', 'Editor')))
+        }
+    } elseif ($script:IsLinux) {
+        $paths.Add('/opt/Unity/Hub/Editor')
+        $paths.Add('/opt/UnityHub/Editor')
+
+        if ($env:HOME) {
+            $paths.Add((Join-PathSegments -Segments @($env:HOME, 'Unity', 'Hub', 'Editor')))
+            $paths.Add((Join-PathSegments -Segments @($env:HOME, 'UnityHub', 'Editor')))
+            $paths.Add((Join-PathSegments -Segments @($env:HOME, '.local', 'share', 'unity3d', 'Hub', 'Editor')))
+        }
+    }
+
+    return $paths | Where-Object { $_ } | Select-Object -Unique
+}
+
+function Get-UnityExecutableFromDirectory {
+    param(
+        [System.IO.DirectoryInfo]$Directory
+    )
+
+    if (-not $Directory) {
+        return $null
+    }
+
+    if ($script:IsWindows) {
+        return Join-PathSegments -Segments @($Directory.FullName, 'Editor', 'Unity.exe')
+    }
+
+    if ($script:IsMacOS) {
+        if ($Directory.Name -like '*.app') {
+            $appBinary = Join-PathSegments -Segments @($Directory.FullName, 'Contents', 'MacOS', 'Unity')
+            if (Test-Path $appBinary) {
+                return $appBinary
+            }
+        }
+
+        $embeddedApp = Join-PathSegments -Segments @($Directory.FullName, 'Unity.app', 'Contents', 'MacOS', 'Unity')
+        if (Test-Path $embeddedApp) {
+            return $embeddedApp
+        }
+
+        $editorApp = Join-PathSegments -Segments @($Directory.FullName, 'Editor', 'Unity.app', 'Contents', 'MacOS', 'Unity')
+        if (Test-Path $editorApp) {
+            return $editorApp
+        }
+
+        return $null
+    }
+
+    $editorBinary = Join-PathSegments -Segments @($Directory.FullName, 'Editor', 'Unity')
+    if (Test-Path $editorBinary) {
+        return $editorBinary
+    }
+
+    $fallbackBinary = Join-PathSegments -Segments @($Directory.FullName, 'Unity')
+    if (Test-Path $fallbackBinary) {
+        return $fallbackBinary
+    }
+
+    return $null
+}
+
+function Get-UnityExecutableFromBase {
+    param(
+        [string]$BasePath,
+        [string]$UnityVersion
+    )
+
+    if (-not $UnityVersion) {
+        return $null
+    }
+
+    $versionDirectoryPath = Join-PathSegments -Segments @($BasePath, $UnityVersion)
+    if (-not (Test-Path $versionDirectoryPath)) {
+        return $null
+    }
+
+    try {
+        $directory = Get-Item -Path $versionDirectoryPath -ErrorAction Stop
+        return Get-UnityExecutableFromDirectory -Directory $directory
+    } catch {
+        return $null
+    }
+}
+
+function Find-UnityEditorExecutable {
+    param(
+        [string]$UnityVersion
+    )
+
+    $basePaths = Get-UnityEditorBasePaths
+    $majorMinor = $null
+    if ($UnityVersion -and ($UnityVersion -split '\.').Count -ge 2) {
+        $split = $UnityVersion -split '\.'
+        $majorMinor = "$($split[0]).$($split[1])"
+    }
+
+    foreach ($basePath in $basePaths) {
+        if (-not (Test-Path $basePath)) {
+            continue
+        }
+
+        $exactCandidate = Get-UnityExecutableFromBase -BasePath $basePath -UnityVersion $UnityVersion
+        if ($exactCandidate -and (Test-Path $exactCandidate)) {
+            return [pscustomobject]@{
+                Path = $exactCandidate
+                Version = $UnityVersion
+                MatchType = 'Exact'
+            }
+        }
+
+        $directories = Get-ChildItem -Path $basePath -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending
+        foreach ($directory in $directories) {
+            if ($UnityVersion -and $directory.Name -eq $UnityVersion) {
+                continue
+            }
+
+            if ($majorMinor -and -not ($directory.Name.StartsWith($majorMinor))) {
+                continue
+            }
+
+            $candidate = Get-UnityExecutableFromDirectory -Directory $directory
+            if ($candidate -and (Test-Path $candidate)) {
+                return [pscustomobject]@{
+                    Path = $candidate
+                    Version = $directory.Name
+                    MatchType = 'Similar'
+                }
+            }
+        }
+    }
+
+    $commandCandidates = @('unity', 'Unity')
+    foreach ($command in $commandCandidates) {
+        try {
+            $commandInfo = Get-Command $command -ErrorAction Stop
+            $commandPath = if ($commandInfo.Path) { $commandInfo.Path } else { $commandInfo.Source }
+            if ($commandPath) {
+                return [pscustomobject]@{
+                    Path = $commandPath
+                    Version = $UnityVersion
+                    MatchType = 'Command'
+                }
+            }
+        } catch {
+            continue
+        }
+    }
+
+    return $null
+}
+
+function Start-UnityHubForProject {
+    param(
+        [string]$UnityHubPath,
+        [string]$ProjectPath
+    )
+
+    $projectArgument = if ($script:IsWindows) { "`"$ProjectPath`"" } else { $ProjectPath }
+    $arguments = @('--projectPath', $projectArgument)
+
+    if ($UnityHubPath -and (Test-Path $UnityHubPath)) {
+        $hubExecutable = $UnityHubPath
+        if ($script:IsMacOS -and $hubExecutable -like '*.app') {
+            $bundleExecutable = Join-PathSegments -Segments @($hubExecutable, 'Contents', 'MacOS', 'Unity Hub')
+            if (Test-Path $bundleExecutable) {
+                $hubExecutable = $bundleExecutable
+            }
+        }
+
+        Start-Process -FilePath $hubExecutable -ArgumentList $arguments -NoNewWindow:$false
+        return $true
+    }
+
+    if ($script:IsMacOS -and (Test-Path '/Applications/Unity Hub.app')) {
+        Start-Process -FilePath 'open' -ArgumentList '-a', 'Unity Hub', '--args', '--projectPath', $ProjectPath -NoNewWindow:$false
+        return $true
+    }
+
+    try {
+        $commandInfo = Get-Command $UnityHubPath -ErrorAction Stop
+        $hubCommand = if ($commandInfo.Path) { $commandInfo.Path } else { $commandInfo.Source }
+        if (-not $hubCommand) {
+            $hubCommand = $UnityHubPath
+        }
+
+        Start-Process -FilePath $hubCommand -ArgumentList $arguments -NoNewWindow:$false
+        return $true
+    } catch {
+        return $false
+    }
+}
+
 function New-UnityProjectsData {
     return [ordered]@{}
 }
@@ -736,7 +1019,7 @@ function Open-UnityProject {
     param(
         [string]$ProjectPath,
         [string]$Alias,
-        [string]$UnityHubPath = 'C:\Program Files\Unity Hub\Unity Hub.exe',
+        [string]$UnityHubPath = (Get-UnityHubDefaultPath),
         [Parameter(ValueFromPipeline = $true)]
         [string]$InputObject
     )
@@ -798,39 +1081,18 @@ function Open-UnityProject {
 
         # Try to find Unity installation
         $unityEditorPath = $null
-
-        # Common Unity installation paths
-        $programFilesX86 = ${env:ProgramFiles(x86)}
-        $unityBasePaths = @(
-            'C:\Program Files\Unity\Hub\Editor',
-            'C:\Program Files\Unity',
-            "$programFilesX86\Unity",
-            "$programFilesX86\Unity Hub\Editor"
-        )
-
-        foreach ($basePath in $unityBasePaths) {
-            if (Test-Path $basePath) {
-                # Look for exact version match first
-                $exactVersionPath = Join-Path $basePath "$unityVersion\Editor\Unity.exe"
-                if (Test-Path $exactVersionPath) {
-                    $unityEditorPath = $exactVersionPath
+        $unityMatch = Find-UnityEditorExecutable -UnityVersion $unityVersion
+        if ($unityMatch) {
+            $unityEditorPath = $unityMatch.Path
+            switch ($unityMatch.MatchType) {
+                'Exact' {
                     Write-Host "Found exact Unity version at: $unityEditorPath"
-                    break
                 }
-
-                # Look for similar version (same major.minor)
-                $majorMinor = ($unityVersion -split '\.')[0..1] -join '.'
-                $similarVersions = Get-ChildItem -Path $basePath -Directory -ErrorAction SilentlyContinue |
-                    Where-Object { $_.Name.StartsWith($majorMinor) } |
-                    Sort-Object Name -Descending
-
-                if ($similarVersions) {
-                    $similarVersionPath = Join-Path $similarVersions[0].FullName 'Editor\Unity.exe'
-                    if (Test-Path $similarVersionPath) {
-                        $unityEditorPath = $similarVersionPath
-                        Write-Host "Found similar Unity version: $($similarVersions[0].Name) at: $unityEditorPath"
-                        break
-                    }
+                'Similar' {
+                    Write-Host "Found similar Unity version ($($unityMatch.Version)) at: $unityEditorPath"
+                }
+                'Command' {
+                    Write-Host "Using Unity executable from PATH: $unityEditorPath"
                 }
             }
         }
@@ -839,19 +1101,19 @@ function Open-UnityProject {
         if (-not $unityEditorPath) {
             Write-Warning "Unity version $unityVersion not found locally."
 
-            if (Test-Path $UnityHubPath) {
-                Write-Host 'Opening Unity Hub to install/select Unity version...'
-                $choice = Read-Host 'Do you want to open Unity Hub to install the required version? (Y/n)'
-                if ($choice -notmatch '^[Nn]') {
-                    Start-Process -FilePath $UnityHubPath -ArgumentList '--projectPath', "`"$ProjectPath`"" -NoNewWindow:$false
-                    # Update last opened time even if using Unity Hub
+            Write-Host 'Opening Unity Hub to install/select Unity version...'
+            $choice = Read-Host 'Do you want to open Unity Hub to install the required version? (Y/n)'
+            if ($choice -notmatch '^[Nn]') {
+                if (Start-UnityHubForProject -UnityHubPath $UnityHubPath -ProjectPath $ProjectPath) {
                     Update-LastOpened -ProjectPath $ProjectPath -Alias $Alias
                     return
                 }
-            } else {
-                Write-Error "Unity Hub also not found at: $UnityHubPath"
+
+                Write-Error "Unity Hub could not be launched using '$UnityHubPath'. Ensure Unity Hub is installed and available on PATH."
                 return
             }
+
+            return
         }
 
         # Launch Unity directly with the project
@@ -861,9 +1123,8 @@ function Open-UnityProject {
 
             # Unity command line arguments:
             # -projectPath: specify project path
-            $arguments = @(
-                '-projectPath', "`"$ProjectPath`""
-            )
+            $projectArgument = if ($script:IsWindows) { "`"$ProjectPath`"" } else { $ProjectPath }
+            $arguments = @('-projectPath', $projectArgument)
 
             Start-Process -FilePath $unityEditorPath -ArgumentList $arguments -NoNewWindow:$false
             Write-Host 'Unity launched successfully!'

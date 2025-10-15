@@ -195,37 +195,13 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v5
 
-    - name: Test PowerShell syntax
+    - name: Show PowerShell environment
       shell: pwsh
       run: |
-        Write-Host "Testing PowerShell syntax on $($PSVersionTable.OS)" -ForegroundColor Cyan
+        Write-Host "Operating System: $($PSVersionTable.OS)" -ForegroundColor Cyan
+        Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)" -ForegroundColor Cyan
 
-        # Get all PowerShell files
-        $files = Get-ChildItem -Recurse -Include "*.ps1", "*.psm1", "*.psd1" | Where-Object {
-          $_.FullName -notmatch "[/\\]\.git[/\\]" -and
-          $_.FullName -notmatch "[/\\]bin[/\\]" -and
-          $_.FullName -notmatch "[/\\]obj[/\\]"
-        }
-
-        $syntaxErrors = @()
-
-        foreach ($file in $files) {
-          try {
-            $ast = [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$null, [ref]$null)
-            if ($null -eq $ast) {
-              $syntaxErrors += "Failed to parse: $($file.Name)"
-            }
-            Write-Host "Syntax OK: $($file.Name)" -ForegroundColor Green
-          }
-          catch {
-            $syntaxErrors += "$($file.Name): $($_.Exception.Message)"
-            Write-Error "Syntax Error: $($file.Name) - $($_.Exception.Message)"
-          }
-        }
-
-        if ($syntaxErrors.Count -gt 0) {
-          Write-Error "Found $($syntaxErrors.Count) syntax errors"
-          exit 1
-        }
-
-        Write-Host "All files have valid PowerShell syntax!" -ForegroundColor Green
+    - name: Run cross-platform test suite
+      shell: pwsh
+      run: |
+        ./Run-Tests.ps1 -CI
