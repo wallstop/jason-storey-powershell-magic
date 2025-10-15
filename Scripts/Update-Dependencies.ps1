@@ -69,6 +69,177 @@ function Write-HostError {
     Write-Host "[ERROR] $Message" -ForegroundColor Red
 }
 
+$script:DependencyUserAgent = 'PowerShellMagic-DependencyUpdater/1.0 (+https://github.com/jason-storey/powershell-magic)'
+$script:DefaultAcceptLanguages = 'en-US,en;q=0.9'
+
+function Reset-DependencyHttpInvoker {
+    $script:InvokeRestMethodDelegate = {
+        param($parameters)
+        Invoke-RestMethod @parameters
+    }
+
+    $script:InvokeWebRequestDelegate = {
+        param($parameters)
+        Invoke-WebRequest @parameters
+    }
+}
+
+Reset-DependencyHttpInvoker
+
+function Set-DependencyHttpInvoker {
+    param(
+        [ScriptBlock]$RestMethod,
+        [ScriptBlock]$WebRequest,
+        [switch]$Reset
+    )
+
+    if ($Reset) {
+        Reset-DependencyHttpInvoker
+        return
+    }
+
+    if ($PSBoundParameters.ContainsKey('RestMethod')) {
+        $script:InvokeRestMethodDelegate = $RestMethod
+    }
+
+    if ($PSBoundParameters.ContainsKey('WebRequest')) {
+        $script:InvokeWebRequestDelegate = $WebRequest
+    }
+}
+
+function Get-DependencyHttpHeaders {
+    param(
+        [string]$Accept = '*/*',
+        [hashtable]$AdditionalHeaders
+    )
+
+    $headers = [ordered]@{
+        'User-Agent' = $script:DependencyUserAgent
+        'Accept' = $Accept
+        'Accept-Language' = $script:DefaultAcceptLanguages
+    }
+
+    if ($AdditionalHeaders) {
+        foreach ($key in $AdditionalHeaders.Keys) {
+            $headers[$key] = $AdditionalHeaders[$key]
+        }
+    }
+
+    return $headers
+}
+
+function Invoke-DependencyRestMethod {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Uri,
+
+        [string]$Accept = 'application/json',
+
+        [hashtable]$AdditionalHeaders
+    )
+
+    $headers = Get-DependencyHttpHeaders -Accept $Accept -AdditionalHeaders $AdditionalHeaders
+    $parameters = @{
+        Uri = $Uri
+        Headers = $headers
+        ErrorAction = 'Stop'
+        Method = 'GET'
+    }
+
+    return & $script:InvokeRestMethodDelegate $parameters
+}
+
+function Invoke-DependencyWebRequest {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Uri,
+
+        [string]$Accept = 'text/html,application/xhtml+xml',
+
+        [hashtable]$AdditionalHeaders,
+
+        [switch]$DisableRedirect
+    )
+
+    $headers = Get-DependencyHttpHeaders -Accept $Accept -AdditionalHeaders $AdditionalHeaders
+
+    $parameters = @{
+        Uri = $Uri
+        Headers = $headers
+        ErrorAction = 'Stop'
+    }
+
+    if ($DisableRedirect) {
+        $parameters.MaximumRedirection = 0
+    }
+
+    if ($PSVersionTable.PSVersion.Major -lt 6) {
+        $parameters.UseBasicParsing = $true
+    }
+
+    return & $script:InvokeWebRequestDelegate $parameters
+}
+
+function Get-GitHubLatestReleaseTag {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Repository
+    )
+
+    $apiUri = "https://api.github.com/repos/$Repository/releases/latest"
+
+    try {
+        $additionalHeaders = @{
+            'Accept' = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
+        }
+
+        $response = Invoke-DependencyRestMethod -Uri $apiUri -Accept 'application/vnd.github+json' -AdditionalHeaders $additionalHeaders
+        if ($response -and $response.tag_name) {
+            return $response.tag_name
+        }
+
+        Write-WarningMessage "GitHub API response for '$Repository' did not include a tag_name. Falling back to HTML parsing."
+    } catch {
+        Write-WarningMessage "GitHub API request for '$Repository' failed: $($_.Exception.Message). Falling back to HTML parsing."
+    }
+
+    $fallbackUri = "https://github.com/$Repository/releases/latest"
+
+    try {
+        $webResponse = Invoke-DependencyWebRequest -Uri $fallbackUri -Accept 'text/html,application/xhtml+xml'
+        $redirectUri = $null
+
+        if ($webResponse.BaseResponse -and $webResponse.BaseResponse.ResponseUri) {
+            $redirectUri = $webResponse.BaseResponse.ResponseUri.AbsoluteUri
+        }
+
+        if (-not $redirectUri -and $webResponse.Headers -and $webResponse.Headers['Location']) {
+            $redirectUri = $webResponse.Headers['Location']
+        }
+
+        if ($redirectUri) {
+            $match = [regex]::Match($redirectUri, '/releases/tag/(?<tag>[^/]+)$')
+            if ($match.Success) {
+                return $match.Groups['tag'].Value
+            }
+        }
+
+        if ($webResponse.Content) {
+            $match = [regex]::Match($webResponse.Content, 'releases/tag/(?<tag>[^"''\s]+)')
+            if ($match.Success) {
+                return $match.Groups['tag'].Value
+            }
+        }
+
+        Write-WarningMessage "GitHub fallback response for '$Repository' did not include a release tag."
+    } catch {
+        Write-WarningMessage "GitHub fallback request for '$Repository' failed: $($_.Exception.Message)"
+    }
+
+    return $null
+}
+
 # Dependency update definitions
 $DependencyUpdaters = @{
     'fzf' = @{
@@ -77,8 +248,8 @@ $DependencyUpdaters = @{
         AssetPattern = 'fzf-*-windows_amd64.zip'
         CurrentUrlPattern = 'https://github.com/junegunn/fzf/releases/download/v*/fzf-*-windows_amd64.zip'
         GetLatestVersion = {
-            $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/junegunn/fzf/releases/latest" -ErrorAction Stop
-            return $releases.tag_name.TrimStart('v')
+            $tag = Get-GitHubLatestReleaseTag -Repository 'junegunn/fzf'
+            return $tag.TrimStart('v')
         }
         BuildUrl = {
             param($Version)
@@ -88,21 +259,41 @@ $DependencyUpdaters = @{
     '7zip' = @{
         Name = '7-Zip'
         GetLatestVersion = {
-            # 7-Zip doesn't have a proper API, so we scrape the download page
+            # 7-Zip doesn't have a proper API, so we scrape the download page with a fallback mirror
+            $primaryUri = "https://www.7-zip.org/download.html"
+            $fallbackUri = "https://sourceforge.net/projects/sevenzip/files/7-Zip/"
+            $pageContent = $null
+
             try {
-                $response = Invoke-WebRequest -Uri "https://www.7-zip.org/download.html" -UseBasicParsing -ErrorAction Stop
-                # Look for the x64 exe download link
-                if ($response.Content -match 'href="a/(7z(\d+)-x64\.exe)"') {
-                    $filename = $matches[1]
-                    # Extract version from filename (e.g., 7z2407-x64.exe -> 2407)
-                    if ($filename -match '7z(\d+)-x64\.exe') {
-                        return $matches[1]
-                    }
-                }
+                $response = Invoke-DependencyWebRequest -Uri $primaryUri -Accept 'text/html,application/xhtml+xml'
+                $pageContent = $response.Content
             } catch {
-                Write-WarningMessage "Failed to check 7-Zip version: $($_.Exception.Message)"
+                Write-WarningMessage "Failed to fetch primary 7-Zip metadata: $($_.Exception.Message). Trying fallback mirror."
+                try {
+                    $fallbackResponse = Invoke-DependencyWebRequest -Uri $fallbackUri -Accept 'text/html,application/xhtml+xml'
+                    $pageContent = $fallbackResponse.Content
+                } catch {
+                    Write-WarningMessage "Failed to fetch fallback 7-Zip metadata: $($_.Exception.Message)"
+                    return $null
+                }
+            }
+
+            if (-not $pageContent) {
+                Write-WarningMessage 'Unable to retrieve 7-Zip version metadata from all sources.'
                 return $null
             }
+
+            $versionMatch = [regex]::Match($pageContent, 'href="a/7z(?<version>\d+)-x64\.exe"', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+            if ($versionMatch.Success) {
+                return $versionMatch.Groups['version'].Value
+            }
+
+            $secondaryMatch = [regex]::Match($pageContent, '7z(?<version>\d+)-x64\.exe', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+            if ($secondaryMatch.Success) {
+                return $secondaryMatch.Groups['version'].Value
+            }
+
+            Write-WarningMessage 'Unable to parse 7-Zip version from download metadata.'
             return $null
         }
         BuildUrl = {
@@ -116,8 +307,8 @@ $DependencyUpdaters = @{
         AssetPattern = 'eza.exe_x86_64-pc-windows-gnu.zip'
         CurrentUrlPattern = 'https://github.com/eza-community/eza/releases/download/v*/eza.exe_x86_64-pc-windows-gnu.zip'
         GetLatestVersion = {
-            $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/eza-community/eza/releases/latest" -ErrorAction Stop
-            return $releases.tag_name.TrimStart('v')
+            $tag = Get-GitHubLatestReleaseTag -Repository 'eza-community/eza'
+            return $tag.TrimStart('v')
         }
         BuildUrl = {
             param($Version)
@@ -199,7 +390,19 @@ function Get-FileHash-Remote {
         $ProgressPreference = 'SilentlyContinue'
 
         try {
-            Invoke-WebRequest -Uri $Url -OutFile $tempFile -UseBasicParsing -ErrorAction Stop
+            $downloadHeaders = Get-DependencyHttpHeaders -Accept 'application/octet-stream'
+            $invokeParams = @{
+                Uri = $Url
+                OutFile = $tempFile
+                Headers = $downloadHeaders
+                ErrorAction = 'Stop'
+            }
+
+            if ($PSVersionTable.PSVersion.Major -lt 6) {
+                $invokeParams.UseBasicParsing = $true
+            }
+
+            Invoke-WebRequest @invokeParams
         } finally {
             $ProgressPreference = $progressPreference
         }
@@ -320,6 +523,9 @@ function Update-SetupScript {
     Write-Info "Backup created at: $backupPath"
 
     $content = Get-Content $setupScript -Raw
+    $templaterModulePath = Join-Path $PSScriptRoot "..\Modules\Templater\Templater.psm1"
+    $templaterContent = $null
+    $templaterUpdated = $false
 
     foreach ($depKey in $Updates.Keys) {
         $update = $Updates[$depKey]
@@ -333,11 +539,37 @@ function Update-SetupScript {
         $content = $content.Replace($update.CurrentHash, $update.NewHash)
 
         Write-Success "Updated $($update.Name): $($update.CurrentVersion) -> $($update.LatestVersion)"
+
+        if ($depKey -eq '7zip' -and (Test-Path $templaterModulePath)) {
+            if (-not $templaterContent) {
+                $templaterContent = Get-Content $templaterModulePath -Raw
+            }
+
+            $originalModuleContent = $templaterContent
+            $newHashValue = $update.NewHash
+            $pattern = "(\$script:Managed7ZipHash = ')[A-F0-9]+'"
+            $templaterContent = [System.Text.RegularExpressions.Regex]::Replace(
+                $templaterContent,
+                $pattern,
+                { param($m) "{0}{1}'" -f $m.Groups[1].Value, $newHashValue }
+            )
+
+            if ($templaterContent -ne $originalModuleContent) {
+                $templaterUpdated = $true
+                Write-Success "Updated Templater managed 7-Zip hash"
+            } else {
+                Write-Warning "Failed to update managed 7-Zip hash in Templater module automatically."
+            }
+        }
     }
 
     # Write updated content
     Set-Content -Path $setupScript -Value $content -Encoding UTF8
     Write-Success "Setup script updated successfully"
+
+    if ($templaterUpdated -and $templaterContent) {
+        Set-Content -Path $templaterModulePath -Value $templaterContent -Encoding UTF8
+    }
 }
 
 function Main {
@@ -392,5 +624,7 @@ function Main {
     }
 }
 
-# Run main function
-Main
+if ($MyInvocation.InvocationName -ne '.') {
+    # Run main function when executed normally (not dot-sourced)
+    Main
+}

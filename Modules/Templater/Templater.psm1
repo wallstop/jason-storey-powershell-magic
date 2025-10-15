@@ -7,6 +7,8 @@ $script:ZipAssemblyLoaded = $false
 $script:Trusted7ZipPath = $null
 $script:IsWindows = ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT)
 $script:SevenZipWarningEmitted = $false
+$script:Managed7ZipHash = '78AFA2A1C773CAF3CF7EDF62F857D2A8A5DA55FB0FFF5DA416074C0D28B2B55F'
+$script:SevenZipHashCache = @{}
 
 # Private helper functions
 function Get-TemplaterConfigPath {
@@ -130,7 +132,13 @@ function Update-LastUsed {
 
     if ($templateData.ContainsKey($Alias)) {
         $templateData[$Alias].LastUsed = $currentTime
-        $templateData[$Alias].UseCount = (if ($templateData[$Alias].UseCount) { $templateData[$Alias].UseCount } else { 0 }) + 1
+        $currentCount = 0
+
+        if ($null -ne $templateData[$Alias].UseCount) {
+            [int]::TryParse($templateData[$Alias].UseCount.ToString(), [ref]$currentCount) | Out-Null
+        }
+
+        $templateData[$Alias].UseCount = $currentCount + 1
         Save-TemplateData -TemplateData $templateData
     }
 }
@@ -184,6 +192,83 @@ function Test-IsTrusted7ZipPath {
     return $false
 }
 
+function Get-ManagedSevenZipDirectory {
+    if (-not $script:IsWindows) {
+        return $null
+    }
+
+    if (-not $env:LOCALAPPDATA) {
+        return $null
+    }
+
+    return Join-Path (Join-Path $env:LOCALAPPDATA 'PowerShellMagic') 'bin'
+}
+
+function Test-IsManagedSevenZipPath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $managedDir = Get-ManagedSevenZipDirectory
+    if (-not $managedDir) {
+        return $false
+    }
+
+    try {
+        $resolvedDir = (Resolve-Path $managedDir -ErrorAction Stop).Path
+        $resolvedPath = (Resolve-Path $Path -ErrorAction Stop).Path
+        $comparison = if ($script:IsWindows) { [System.StringComparison]::OrdinalIgnoreCase } else { [System.StringComparison]::Ordinal }
+        return $resolvedPath.StartsWith($resolvedDir, $comparison)
+    } catch {
+        return $false
+    }
+}
+
+function Test-7ZipHashValid {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ExecutablePath
+    )
+
+    if (-not (Test-Path $ExecutablePath -PathType Leaf)) {
+        return $false
+    }
+
+    if ($script:SevenZipHashCache.ContainsKey($ExecutablePath)) {
+        return $script:SevenZipHashCache[$ExecutablePath]
+    }
+
+    $expectedHash = if ($env:POWERSHELLMAGIC_7ZIP_HASH) {
+        $env:POWERSHELLMAGIC_7ZIP_HASH
+    } elseif (Test-IsManagedSevenZipPath -Path $ExecutablePath) {
+        $script:Managed7ZipHash
+    } else {
+        $null
+    }
+
+    if (-not $expectedHash) {
+        $script:SevenZipHashCache[$ExecutablePath] = $true
+        return $true
+    }
+
+    try {
+        $fileHash = Get-FileHash -Path $ExecutablePath -Algorithm SHA256 -ErrorAction Stop
+        $isValid = ($fileHash.Hash -eq $expectedHash.ToUpperInvariant())
+
+        if (-not $isValid) {
+            Write-Warning "7-Zip executable hash mismatch for '$ExecutablePath'. Expected $expectedHash but found $($fileHash.Hash)."
+        }
+
+        $script:SevenZipHashCache[$ExecutablePath] = $isValid
+        return $isValid
+    } catch {
+        Write-Warning "Failed to verify 7-Zip executable hash for '$ExecutablePath': $($_.Exception.Message)"
+        $script:SevenZipHashCache[$ExecutablePath] = $false
+        return $false
+    }
+}
+
 function Get-Trusted7ZipExecutable {
     if ($script:Trusted7ZipPath -and (Test-Path $script:Trusted7ZipPath)) {
         return $script:Trusted7ZipPath
@@ -217,8 +302,14 @@ function Get-Trusted7ZipExecutable {
     foreach ($candidate in $candidates | Where-Object { $_ }) {
         try {
             if (Test-Path $candidate) {
-                $script:Trusted7ZipPath = (Resolve-Path $candidate -ErrorAction Stop).Path
-                return $script:Trusted7ZipPath
+                $resolvedCandidate = (Resolve-Path $candidate -ErrorAction Stop).Path
+                if (Test-7ZipHashValid -ExecutablePath $resolvedCandidate) {
+                    $script:Trusted7ZipPath = $resolvedCandidate
+                    return $script:Trusted7ZipPath
+                } elseif (-not $script:SevenZipWarningEmitted) {
+                    Write-Warning "Rejected 7-Zip executable at '$resolvedCandidate' due to failed hash verification."
+                    $script:SevenZipWarningEmitted = $true
+                }
             }
         } catch {
             continue
@@ -234,7 +325,7 @@ function Get-Trusted7ZipExecutable {
 
             if ($commandPath) {
                 $resolved = (Resolve-Path $commandPath -ErrorAction Stop).Path
-                if (Test-IsTrusted7ZipPath -Path $resolved) {
+                if (Test-IsTrusted7ZipPath -Path $resolved -and (Test-7ZipHashValid -ExecutablePath $resolved)) {
                     $script:Trusted7ZipPath = $resolved
                     return $script:Trusted7ZipPath
                 } else {
@@ -382,7 +473,7 @@ function Extract-Archive {
                     $archive.Dispose()
                 }
 
-                Write-Host "Successfully extracted ZIP: $ArchivePath" -ForegroundColor Green
+                Write-Verbose ("Extracted ZIP archive '{0}' to '{1}'" -f $ArchivePath, $DestinationPath)
             }
             { $_ -in @('.7z', '.rar', '.tar', '.gz', '.bz2', '.xz') } {
                 $sevenZip = Get-Trusted7ZipExecutable
@@ -401,7 +492,7 @@ function Extract-Archive {
                 $process = Start-Process -FilePath $sevenZip -ArgumentList $argumentList -Wait -NoNewWindow -PassThru
 
                 if ($process.ExitCode -eq 0) {
-                    Write-Host "Successfully extracted $extension : $ArchivePath" -ForegroundColor Green
+                    Write-Verbose ("Extracted {0} archive '{1}' to '{2}' via 7-Zip" -f $extension, $ArchivePath, $DestinationPath)
                 } else {
                     throw "7-Zip extraction failed with exit code: $($process.ExitCode)"
                 }
