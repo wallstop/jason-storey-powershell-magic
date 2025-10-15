@@ -18,11 +18,6 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v5
 
-    - name: Install PowerShell 7
-      uses: PowerShell/actions-setup-pwsh@v2
-      with:
-        version: '7.4.x'
-
     - name: Setup PowerShell
       run: |
         Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
@@ -86,11 +81,6 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v5
 
-    - name: Install PowerShell 7
-      uses: PowerShell/actions-setup-pwsh@v2
-      with:
-        version: '7.4.x'
-
     - name: Test module imports
       run: |
         Write-Host "Testing PowerShell module imports..." -ForegroundColor Cyan
@@ -129,13 +119,15 @@ jobs:
   security-scan:
     name: Security Scan
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v5
 
     - name: Run PSScriptAnalyzer security rules
-      shell: powershell
       run: |
         Write-Host "Running security analysis..." -ForegroundColor Cyan
 
