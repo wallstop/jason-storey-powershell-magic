@@ -294,6 +294,94 @@ Recommended! Unitea uses Unity Hub to:
 
 **Without Unity Hub:** You can still save project paths and navigate to them.
 
+### What is auto-sync and how does it work?
+
+**Auto-sync** keeps your saved Unity project metadata up-to-date
+when you upgrade or change Unity versions.
+
+**How it works:**
+
+1. Unitea saves your project's Unity version when you add it (`unity-add`)
+2. When you open a project, Unitea reads the actual version from
+   `ProjectVersion.txt`
+3. If the versions don't match, you get a warning
+4. Use `-AutoUpdate` to automatically update the saved version:
+
+   ```powershell
+   unity mygame -AutoUpdate
+   ```
+
+**Why this matters:** If you upgrade a Unity project from 2021.3 to 2022.1,
+Unitea needs to know so it can launch the correct editor version.
+
+### How do I check if my projects are out of sync?
+
+Use the sync check command:
+
+```powershell
+# Check all projects for version drift
+unity-check
+
+# Check specific project
+unity-check -Alias mygame
+
+# Include in-sync projects too
+unity-check -IncludeInSync
+```
+
+This shows projects where the saved version differs from the actual project
+version.
+
+### How do I fix out-of-sync projects?
+
+#### Option 1: Manual update
+
+```powershell
+# Update specific project
+unity-update mygame
+
+# Update all projects
+unity-update -All
+```
+
+#### Option 2: Auto-update when opening
+
+```powershell
+unity mygame -AutoUpdate
+```
+
+#### Option 3: Enable automatic startup sync
+
+Add to your PowerShell profile:
+
+```powershell
+$env:POWERSHELL_MAGIC_UNITEA_AUTOUPDATE_STARTUP = '1'
+```
+
+This automatically updates all out-of-sync projects when you start PowerShell.
+
+### Can Unitea automatically check and update projects on startup?
+
+Yes! Unitea runs a startup check when the module loads. Configure it with
+environment variables:
+
+**Enable automatic updates on startup:**
+
+```powershell
+# Add to your profile
+$env:POWERSHELL_MAGIC_UNITEA_AUTOUPDATE_STARTUP = '1'
+```
+
+**Disable startup checks entirely:**
+
+```powershell
+# Add to your profile
+$env:POWERSHELL_MAGIC_UNITEA_DISABLE_STARTUP_CHECK = '1'
+```
+
+**Default behavior (no env vars):** Warns about out-of-sync projects but doesn't
+auto-update them.
+
 ### Will it work with all Unity versions?
 
 Yes! Unitea detects project versions. It uses the appropriate Unity Editor via

@@ -1027,6 +1027,23 @@ function Import-ModulesInProfile {
         return $false
     }
 
+    $enableUniteaAutoUpdate = $false
+    $uniteaModulePath = if ($modulePaths.ContainsKey('Unitea')) { $modulePaths['Unitea'] } else { $null }
+    if ($uniteaModulePath -and (Test-Path $uniteaModulePath)) {
+        Write-Host ''
+        Write-Host 'Unitea can automatically sync saved Unity metadata when ProjectVersion.txt changes.' -ForegroundColor Cyan
+        Write-Host 'Enabling this sets $env:POWERSHELL_MAGIC_UNITEA_AUTOUPDATE_STARTUP=1 in your profile for future sessions.' -ForegroundColor Cyan
+        $autoUpdateChoice = Get-UserResponse 'Enable Unitea auto-update at shell startup? (y/N)' 'N'
+        if ($autoUpdateChoice -match '^[Yy]') {
+            $enableUniteaAutoUpdate = $true
+            $env:POWERSHELL_MAGIC_UNITEA_AUTOUPDATE_STARTUP = '1'
+            Write-Success 'Unitea auto-update enabled for this session and future PowerShell startups.'
+        } else {
+            Remove-Item Env:\POWERSHELL_MAGIC_UNITEA_AUTOUPDATE_STARTUP -ErrorAction SilentlyContinue
+            Write-Info 'Auto-update remains disabled. You can enable it later by setting $env:POWERSHELL_MAGIC_UNITEA_AUTOUPDATE_STARTUP = ''1''.'
+        }
+    }
+
     # Check if profile exists
     if (-not (Test-Path $PROFILE)) {
         Write-Info "Creating PowerShell profile at: $PROFILE"
@@ -1072,6 +1089,8 @@ function Import-ModulesInProfile {
         Import-Module $uniteaPath -Force
     }
 
+__UNITEA_AUTOUPDATE_BLOCK__
+
     Write-Host 'PowerShell Magic modules loaded!' -ForegroundColor Magenta
     Write-Host "- QuickJump: Use 'qj' for fast directory navigation" -ForegroundColor Gray
     Write-Host "- Templater: Use 'templates' for project templates" -ForegroundColor Gray
@@ -1080,6 +1099,16 @@ function Import-ModulesInProfile {
 
 '@
 
+    $autoUpdateBlock = ''
+    if ($enableUniteaAutoUpdate) {
+        $autoUpdateBlock = @'
+    # Enable Unitea auto-update at shell startup. Remove or set to 0 to disable.
+    $env:POWERSHELL_MAGIC_UNITEA_AUTOUPDATE_STARTUP = '1'
+
+'@
+    }
+
+    $importBlock = $importBlock.Replace('__UNITEA_AUTOUPDATE_BLOCK__', $autoUpdateBlock)
     $importBlock = $importBlock.Replace('SCRIPT_PATH_PLACEHOLDER', ($PSScriptRoot -replace '\\', '\\'))
 
     # Check if already imported
