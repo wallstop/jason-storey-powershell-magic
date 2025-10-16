@@ -230,18 +230,27 @@ unity-add othergame "D:\Unity\Other" # Add specific project
 # Open projects
 unity                                # Interactive selector
 unity mygame                         # Open specific project
+unity mygame -AutoUpdate             # Open and auto-sync metadata if version changed
 unity-recent                         # Open most recently used
 
 # Manage projects
 unity-list                           # View all saved projects
+unity-check                          # Check for out-of-sync projects
+unity-update mygame                  # Update project metadata manually
 unity-remove mygame                  # Remove from list
 ```
+
+During setup the bootstrap script offers to enable Unitea's automatic metadata
+sync at shell startup. Opt in to have it set `$env:POWERSHELL_MAGIC_UNITEA_AUTOUPDATE_STARTUP=1`
+in your profile so saved Unity versions stay aligned with `ProjectVersion.txt`.
 
 #### Unitea Key Features
 
 - 🎯 **Auto-detect** Unity projects and their versions
 - 🚀 **Direct launch** opens Unity Editor automatically
 - 🔗 **Unity Hub integration** uses correct editor version
+- 🔄 **Auto-sync** keeps project metadata up-to-date when versions change
+- ⚠️ **Drift detection** warns when saved version doesn't match actual project
 - 📜 **Recent tracking** quickly reopen last project
 - 💾 **Save favorites** no more browsing folders
 
@@ -398,6 +407,8 @@ If you see the commands listed, you're all set!
 |---------|-------|-------------|
 | `Open-UnityProject [alias]` | `unity` | Open Unity project or show interactive menu |
 | `Add-UnityProject -Alias <name>` | `unity-add` | Add current Unity project |
+| `Update-UnityProject -Alias <name>` | `unity-update` | Update project metadata after version change |
+| `Get-UnityProjectSyncStatus` | `unity-check` | Check for projects with outdated metadata |
 | `Get-UnityProjects` | `unity-list` | List all saved Unity projects |
 | `Remove-UnityProject` | `unity-remove` | Remove a Unity project |
 | `Open-RecentUnityProject` | `unity-recent` | Open most recently used project |
