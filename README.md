@@ -37,7 +37,7 @@ solve common developer workflow problems:
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│                    PowerShell Magic                          │
+│                    PowerShell Magic                         │
 ├─────────────────┬─────────────────┬─────────────────────────┤
 │   QuickJump     │    Templater    │       Unitea            │
 │  Navigate Fast  │ Deploy Templates│  Manage Unity Projects  │
