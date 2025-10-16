@@ -836,9 +836,180 @@ function Test-Unitea {
             $aliasRecord = $projects | Where-Object { $_.Alias -eq $alias } | Select-Object -First 1
             Assert-NotNull -Value $aliasRecord -Message 'Project listing contains the added alias'
             Assert-Equal -Expected $resolvedProjectPath -Actual $aliasRecord.Path -Message 'Returned record path matches project location'
+            $initialDateAdded = $aliasRecord.DateAdded
+            $initialLastOpened = $aliasRecord.LastOpenedString
+            $initialUnityVersion = $aliasRecord.UnityVersion
 
             $pathResult = Get-UnityProjects -Alias $alias -Path
             Assert-Equal -Expected $resolvedProjectPath -Actual $pathResult -Message 'Get-UnityProjects -Alias -Path returns project path'
+
+            # Warn when stored metadata is stale
+            $previousNonInteractive = $env:POWERSHELL_MAGIC_NON_INTERACTIVE
+            $env:POWERSHELL_MAGIC_NON_INTERACTIVE = '1'
+            try {
+                $mismatchVersion = '2021.3.99f1'
+                Set-Content -Path $versionFile -Value "m_EditorVersion: $mismatchVersion" -Encoding UTF8
+
+                $mismatchWarnings = $null
+                $null = Open-UnityProject -Alias $alias -WarningVariable mismatchWarnings -WarningAction Continue
+                $mismatchWarningCount = @($mismatchWarnings).Count
+                Assert-True -Condition ($mismatchWarningCount -ge 1) -Message 'Open-UnityProject emits warning when metadata is stale'
+
+                $postWarningProjects = @(Get-UnityProjects -ErrorAction Stop)
+                $postWarningRecord = $postWarningProjects | Where-Object { $_.Alias -eq $alias } | Select-Object -First 1
+                Assert-Equal -Expected $initialUnityVersion -Actual $postWarningRecord.UnityVersion -Message 'Warning path does not mutate stored version'
+            } finally {
+                if ($null -ne $previousNonInteractive) {
+                    $env:POWERSHELL_MAGIC_NON_INTERACTIVE = $previousNonInteractive
+                } else {
+                    Remove-Item Env:\POWERSHELL_MAGIC_NON_INTERACTIVE -ErrorAction SilentlyContinue
+                }
+            }
+
+            Set-Content -Path $versionFile -Value "m_EditorVersion: $initialUnityVersion" -Encoding UTF8
+
+            # Change Unity version and refresh stored metadata
+            $updatedVersion = '2022.1.5f1'
+            Set-Content -Path $versionFile -Value "m_EditorVersion: $updatedVersion" -Encoding UTF8
+
+            $refreshResult = Update-UnityProject -Alias $alias -PassThru -ErrorAction Stop
+            if ($refreshResult -is [System.Array]) {
+                $refreshResult = $refreshResult | Select-Object -First 1
+            }
+            Assert-NotNull -Value $refreshResult -Message 'Update-UnityProject returns a result for alias refresh'
+            Assert-True -Condition $refreshResult.Updated -Message 'Alias refresh reports an update occurred'
+            Assert-Equal -Expected $updatedVersion -Actual $refreshResult.UnityVersion -Message 'Alias refresh reports new Unity version'
+
+            $refreshedProjects = @(Get-UnityProjects -ErrorAction Stop)
+            $refreshedRecord = $refreshedProjects | Where-Object { $_.Alias -eq $alias } | Select-Object -First 1
+            Assert-Equal -Expected $updatedVersion -Actual $refreshedRecord.UnityVersion -Message 'Stored Unity version updated after refresh'
+            Assert-Equal -Expected $initialDateAdded -Actual $refreshedRecord.DateAdded -Message 'DateAdded preserved after refresh'
+            Assert-Equal -Expected $initialLastOpened -Actual $refreshedRecord.LastOpenedString -Message 'LastOpened preserved after refresh'
+
+            $noChange = Update-UnityProject -Alias $alias -PassThru -ErrorAction Stop
+            if ($noChange -is [System.Array]) {
+                $noChange = $noChange | Select-Object -First 1
+            }
+            Assert-True -Condition (-not $noChange.Updated) -Message 'Repeated refresh without changes reports no update'
+
+            # Auto-update via Open-UnityProject
+            $previousNonInteractive = $env:POWERSHELL_MAGIC_NON_INTERACTIVE
+            $env:POWERSHELL_MAGIC_NON_INTERACTIVE = '1'
+            try {
+                $autoUpdateVersion = '2022.1.6f1'
+                Set-Content -Path $versionFile -Value "m_EditorVersion: $autoUpdateVersion" -Encoding UTF8
+
+                $autoWarnings = $null
+                $null = Open-UnityProject -Alias $alias -AutoUpdate -WarningVariable autoWarnings -WarningAction Continue
+                $autoWarningCount = @($autoWarnings).Count
+                Assert-Equal -Expected 0 -Actual $autoWarningCount -Message 'Auto-update completes without warnings'
+
+                $autoUpdatedProjects = @(Get-UnityProjects -ErrorAction Stop)
+                $autoUpdatedRecord = $autoUpdatedProjects | Where-Object { $_.Alias -eq $alias } | Select-Object -First 1
+                Assert-Equal -Expected $autoUpdateVersion -Actual $autoUpdatedRecord.UnityVersion -Message 'Open-UnityProject auto-update refreshes stored version'
+                Assert-Equal -Expected $initialDateAdded -Actual $autoUpdatedRecord.DateAdded -Message 'Auto-update preserves DateAdded metadata'
+            } finally {
+                if ($null -ne $previousNonInteractive) {
+                    $env:POWERSHELL_MAGIC_NON_INTERACTIVE = $previousNonInteractive
+                } else {
+                    Remove-Item Env:\POWERSHELL_MAGIC_NON_INTERACTIVE -ErrorAction SilentlyContinue
+                }
+            }
+
+            # Add a second project for -All and -ProjectPath scenarios
+            $secondProjectPath = Join-Path $workspaceRoot 'SampleProjectTwo'
+            New-Item -ItemType Directory -Path $secondProjectPath -Force | Out-Null
+            $secondProjectSettings = Join-Path $secondProjectPath 'ProjectSettings'
+            New-Item -ItemType Directory -Path $secondProjectSettings -Force | Out-Null
+            $secondVersionFile = Join-Path $secondProjectSettings 'ProjectVersion.txt'
+            Set-Content -Path $secondVersionFile -Value 'm_EditorVersion: 2020.3.1f1' -Encoding UTF8
+
+            $secondAlias = "unitea-test-$([System.Guid]::NewGuid().ToString('N').Substring(0, 8))"
+            Add-UnityProject -Alias $secondAlias -ProjectPath $secondProjectPath -Force -ErrorAction Stop
+
+            # Startup sync detection and optional auto-update
+            $startupMismatchVersion = '2020.3.5f1'
+            Set-Content -Path $secondVersionFile -Value "m_EditorVersion: $startupMismatchVersion" -Encoding UTF8
+
+            $previousDisableStartup = $env:POWERSHELL_MAGIC_UNITEA_DISABLE_STARTUP_CHECK
+            $previousAutoUpdateStartup = $env:POWERSHELL_MAGIC_UNITEA_AUTOUPDATE_STARTUP
+            $env:POWERSHELL_MAGIC_UNITEA_DISABLE_STARTUP_CHECK = $null
+            $env:POWERSHELL_MAGIC_UNITEA_AUTOUPDATE_STARTUP = $null
+
+            try {
+                $startupWarnings = $null
+                $startupResults = Invoke-UniteaStartupSyncCheck -Force -PassThru -WarningVariable startupWarnings -WarningAction Continue
+                $startupResults = @($startupResults)
+                Assert-Equal -Expected 1 -Actual $startupResults.Count -Message 'Startup sync detects one mismatched project'
+                $startupEntry = $startupResults | Select-Object -First 1
+                Assert-Equal -Expected 'VersionMismatch' -Actual $startupEntry.Status -Message 'Startup sync reports version mismatch status'
+                Assert-True -Condition ($startupWarnings -match $secondAlias) -Message 'Startup sync emits warning mentioning the mismatched alias'
+
+                $postStartupProjects = @(Get-UnityProjects -ErrorAction Stop)
+                $postStartupRecord = $postStartupProjects | Where-Object { $_.Alias -eq $secondAlias } | Select-Object -First 1
+                Assert-Equal -Expected '2020.3.1f1' -Actual $postStartupRecord.UnityVersion -Message 'Startup warning does not modify stored version'
+
+                $env:POWERSHELL_MAGIC_UNITEA_AUTOUPDATE_STARTUP = '1'
+                $autoStartupWarnings = $null
+                $autoStartupResults = Invoke-UniteaStartupSyncCheck -Force -PassThru -WarningVariable autoStartupWarnings -WarningAction Continue
+                $autoStartupResults = @($autoStartupResults)
+                Assert-Equal -Expected 1 -Actual $autoStartupResults.Count -Message 'Auto-update startup returns result entry'
+                $autoStartupEntry = $autoStartupResults | Select-Object -First 1
+                Assert-True -Condition $autoStartupEntry.Resolved -Message 'Auto-update marks the issue as resolved'
+                Assert-Equal -Expected 'VersionMismatchResolved' -Actual $autoStartupEntry.Status -Message 'Auto-update reports resolved status'
+                Assert-True -Condition (-not $autoStartupWarnings) -Message 'Auto-update completes without warnings'
+
+                $postAutoProjects = @(Get-UnityProjects -ErrorAction Stop)
+                $postAutoRecord = $postAutoProjects | Where-Object { $_.Alias -eq $secondAlias } | Select-Object -First 1
+                Assert-Equal -Expected $startupMismatchVersion -Actual $postAutoRecord.UnityVersion -Message 'Auto-update startup synchronizes stored version'
+            } finally {
+                if ($null -ne $previousDisableStartup) {
+                    $env:POWERSHELL_MAGIC_UNITEA_DISABLE_STARTUP_CHECK = $previousDisableStartup
+                } else {
+                    Remove-Item Env:\POWERSHELL_MAGIC_UNITEA_DISABLE_STARTUP_CHECK -ErrorAction SilentlyContinue
+                }
+
+                if ($null -ne $previousAutoUpdateStartup) {
+                    $env:POWERSHELL_MAGIC_UNITEA_AUTOUPDATE_STARTUP = $previousAutoUpdateStartup
+                } else {
+                    Remove-Item Env:\POWERSHELL_MAGIC_UNITEA_AUTOUPDATE_STARTUP -ErrorAction SilentlyContinue
+                }
+            }
+
+            # Modify both projects and run bulk update
+            $bulkVersionFirst = '2022.2.0f1'
+            $bulkVersionSecond = '2020.3.2f1'
+            Set-Content -Path $versionFile -Value "m_EditorVersion: $bulkVersionFirst" -Encoding UTF8
+            Set-Content -Path $secondVersionFile -Value "m_EditorVersion: $bulkVersionSecond" -Encoding UTF8
+
+            $bulkResult = Update-UnityProject -All -PassThru -ErrorAction Stop
+            $bulkResultByAlias = @{}
+            foreach ($entry in $bulkResult) {
+                $bulkResultByAlias[$entry.Alias] = $entry
+            }
+
+            Assert-True -Condition ($bulkResultByAlias.ContainsKey($alias)) -Message 'Bulk update includes first alias'
+            Assert-Equal -Expected $bulkVersionFirst -Actual $bulkResultByAlias[$alias].UnityVersion -Message 'Bulk update refreshes first project version'
+            Assert-True -Condition ($bulkResultByAlias.ContainsKey($secondAlias)) -Message 'Bulk update includes second alias'
+            Assert-Equal -Expected $bulkVersionSecond -Actual $bulkResultByAlias[$secondAlias].UnityVersion -Message 'Bulk update refreshes second project version'
+
+            $postBulkProjects = @(Get-UnityProjects -ErrorAction Stop)
+            $secondRecord = $postBulkProjects | Where-Object { $_.Alias -eq $secondAlias } | Select-Object -First 1
+            Assert-Equal -Expected $bulkVersionSecond -Actual $secondRecord.UnityVersion -Message 'Second project stores updated version after bulk refresh'
+
+            # Update using project path matching
+            $pathRefreshVersion = '2021.1.9f1'
+            Set-Content -Path $secondVersionFile -Value "m_EditorVersion: $pathRefreshVersion" -Encoding UTF8
+            $pathResultRefresh = Update-UnityProject -ProjectPath $secondProjectPath -PassThru -ErrorAction Stop
+            if ($pathResultRefresh -is [System.Array]) {
+                $pathResultRefresh = $pathResultRefresh | Select-Object -First 1
+            }
+            Assert-True -Condition $pathResultRefresh.Updated -Message 'Project path refresh reports update'
+            Assert-Equal -Expected $pathRefreshVersion -Actual $pathResultRefresh.UnityVersion -Message 'Project path refresh applies new version'
+
+            $postPathProjects = @(Get-UnityProjects -ErrorAction Stop)
+            $postPathRecord = $postPathProjects | Where-Object { $_.Alias -eq $secondAlias } | Select-Object -First 1
+            Assert-Equal -Expected $pathRefreshVersion -Actual $postPathRecord.UnityVersion -Message 'Stored version matches project path refresh'
 
             # Simulate corrupt JSON and verify recovery
             $configPath = Get-UnityConfigPath

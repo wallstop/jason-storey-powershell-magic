@@ -3,10 +3,23 @@ using namespace System.Collections.Generic
 
 $script:UnityProjectsCache = $null
 $script:UnityProjectsTimestamp = $null
+$script:StartupSyncCheckCompleted = $false
 
 $script:IsWindows = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)
 $script:IsMacOS = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::OSX)
 $script:IsLinux = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Linux)
+
+function Test-EnvironmentToggle {
+    param(
+        [string]$Value
+    )
+
+    if (-not $Value) {
+        return $false
+    }
+
+    return $Value -match '^(1|true|yes|on)$'
+}
 
 function Join-PathSegments {
     param(
@@ -76,6 +89,10 @@ function Get-UnityHubDefaultPath {
     }
 
     return 'unityhub'
+}
+
+function Test-IsNonInteractiveMode {
+    return Test-EnvironmentToggle -Value $env:POWERSHELL_MAGIC_NON_INTERACTIVE
 }
 
 function Get-UnityEditorBasePaths {
@@ -445,6 +462,116 @@ function Get-UnityProjectsData {
     return Copy-UnityProjectsData -ProjectsData $data
 }
 
+function Get-UnityProjectSyncStatus {
+    <#
+    .SYNOPSIS
+    Evaluates saved Unity project metadata and reports drift.
+
+    .DESCRIPTION
+    Reads ProjectVersion.txt for each saved Unity project (or the aliases you specify) and compares
+    the detected editor version with the stored metadata. It also validates that the saved path still
+    exists and looks like a Unity project. Status values include:
+      * InSync - metadata matches the on-disk project
+      * VersionMismatch - the saved version differs from ProjectVersion.txt
+      * VersionMismatchResolved - issue resolved automatically during startup
+      * PathMissing - the saved path no longer exists
+      * NotUnityProject - the directory no longer contains a Unity project
+      * UnknownProjectVersion / UnknownStoredVersion - version information is unavailable
+
+    .PARAMETER Alias
+    One or more aliases to check. Defaults to all saved projects.
+
+    .PARAMETER IncludeInSync
+    Include in-sync projects in the output so scripts can log a full audit.
+
+    .EXAMPLE
+    Get-UnityProjectSyncStatus
+    Lists projects whose metadata is out of sync with ProjectVersion.txt.
+
+    .EXAMPLE
+    Get-UnityProjectSyncStatus -Alias game-dev -IncludeInSync
+    Shows the sync state for a single project and includes any in-sync results.
+    #>
+    [CmdletBinding()]
+    param(
+        [string[]]$Alias,
+        [switch]$IncludeInSync
+    )
+
+    $projectsData = Get-UnityProjectsData
+
+    if (-not $projectsData -or $projectsData.Count -eq 0) {
+        return @()
+    }
+
+    $comparisonType = if ($script:IsWindows) {
+        [System.StringComparison]::OrdinalIgnoreCase
+    } else {
+        [System.StringComparison]::Ordinal
+    }
+
+    $aliasesToEvaluate = if ($Alias) {
+        $Alias
+    } else {
+        $projectsData.Keys
+    }
+
+    $results = New-Object System.Collections.Generic.List[object]
+
+    foreach ($candidateAlias in $aliasesToEvaluate) {
+        if (-not $projectsData.ContainsKey($candidateAlias)) {
+            continue
+        }
+
+        $projectRecord = $projectsData[$candidateAlias]
+        $projectPath = $projectRecord.Path
+        $storedVersion = $projectRecord.UnityVersion
+        $projectName = $projectRecord.Name
+        $status = 'InSync'
+        $actualVersion = $null
+        $message = $null
+
+        if (-not $projectPath -or -not (Test-Path -LiteralPath $projectPath)) {
+            $status = 'PathMissing'
+            $message = "Project path '$projectPath' cannot be found."
+        } elseif (-not (Test-IsUnityProject -Path $projectPath)) {
+            $status = 'NotUnityProject'
+            $message = "Directory '$projectPath' no longer appears to be a Unity project."
+        } else {
+            $projectInfo = Get-UnityProjectInfo -Path $projectPath
+            $actualVersion = $projectInfo.UnityVersion
+
+            if (-not $actualVersion -or $actualVersion -eq 'Unknown') {
+                $status = 'UnknownProjectVersion'
+                $message = "Project version for '$candidateAlias' could not be determined."
+            } else {
+                if (-not $storedVersion -or $storedVersion -eq 'Unknown') {
+                    $status = 'UnknownStoredVersion'
+                    $message = "Stored metadata for '$candidateAlias' is missing a Unity version."
+                } elseif (-not [string]::Equals($storedVersion, $actualVersion, $comparisonType)) {
+                    $status = 'VersionMismatch'
+                    $message = "Stored version $storedVersion differs from project version $actualVersion."
+                }
+            }
+        }
+
+        if ($status -ne 'InSync' -or $IncludeInSync) {
+            $results.Add([PSCustomObject]@{
+                    Alias = $candidateAlias
+                    Name = $projectName
+                    Path = $projectPath
+                    StoredVersion = $storedVersion
+                    ActualVersion = $actualVersion
+                    Status = $status
+                    Message = $message
+                })
+        }
+    }
+
+    return $results
+}
+
+
 function Save-UnityProjectsData {
     param([hashtable]$ProjectsData)
 
@@ -605,6 +732,217 @@ function Add-UnityProject {
     Write-Host "Added Unity project '$($projectInfo.Name)' with alias '$Alias'" -ForegroundColor Green
     Write-Host "  Path: $($projectInfo.Path)" -ForegroundColor Gray
     Write-Host "  Unity Version: $($projectInfo.UnityVersion)" -ForegroundColor Gray
+}
+
+function Update-UnityProject {
+    <#
+    .SYNOPSIS
+    Refreshes stored Unity project metadata after the project version changes.
+
+    .DESCRIPTION
+    Re-reads ProjectVersion.txt for saved Unity projects and updates the stored Unity version,
+    project name, and resolved path so launches continue to work after upgrading Unity.
+
+    .PARAMETER Alias
+    Updates a specific saved project by alias.
+
+    .PARAMETER ProjectPath
+    Updates the saved project that matches the provided project path.
+
+    .PARAMETER All
+    Updates every saved Unity project.
+
+    .PARAMETER PassThru
+    Returns the update results for use in scripts.
+    #>
+    [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = 'Alias')]
+    param(
+        [Parameter(ParameterSetName = 'Alias', Mandatory = $true, Position = 0)]
+        [string]$Alias,
+
+        [Parameter(ParameterSetName = 'Path', Mandatory = $true)]
+        [string]$ProjectPath,
+
+        [Parameter(ParameterSetName = 'All', Mandatory = $true)]
+        [switch]$All,
+
+        [switch]$PassThru
+    )
+
+    $projectsData = Get-UnityProjectsData
+    if (-not $projectsData -or $projectsData.Count -eq 0) {
+        Write-Error 'No saved Unity projects found. Use Add-UnityProject to add projects first.'
+        return
+    }
+
+    $comparisonType = if ($script:IsWindows) {
+        [System.StringComparison]::OrdinalIgnoreCase
+    } else {
+        [System.StringComparison]::Ordinal
+    }
+
+    $targets = @()
+
+    switch ($PSCmdlet.ParameterSetName) {
+        'All' {
+            $targets = $projectsData.GetEnumerator() | ForEach-Object {
+                [PSCustomObject]@{
+                    Alias = $_.Key
+                    Record = $_.Value
+                    Path = $_.Value.Path
+                }
+            }
+        }
+        'Path' {
+            try {
+                $resolvedPath = (Resolve-Path -Path $ProjectPath -ErrorAction Stop).Path
+            } catch {
+                Write-Error "Project path not found: $ProjectPath"
+                return
+            }
+
+            $matchedEntry = $projectsData.GetEnumerator() | Where-Object {
+                $candidatePath = $_.Value.Path
+                if (-not $candidatePath) {
+                    return $false
+                }
+
+                try {
+                    $candidateResolved = (Resolve-Path -Path $candidatePath -ErrorAction Stop).Path
+                } catch {
+                    $candidateResolved = $candidatePath
+                }
+
+                return [string]::Equals($candidateResolved, $resolvedPath, $comparisonType)
+            } | Select-Object -First 1
+
+            if (-not $matchedEntry) {
+                Write-Error "No saved Unity project matches path '$resolvedPath'"
+                return
+            }
+
+            $targets += [PSCustomObject]@{
+                Alias = $matchedEntry.Key
+                Record = $matchedEntry.Value
+                Path = $resolvedPath
+            }
+        }
+        default {
+            if (-not $projectsData.ContainsKey($Alias)) {
+                Write-Error "No project found with alias '$Alias'"
+                return
+            }
+
+            $targets += [PSCustomObject]@{
+                Alias = $Alias
+                Record = $projectsData[$Alias]
+                Path = $projectsData[$Alias].Path
+            }
+        }
+    }
+
+    if ($targets.Count -eq 0) {
+        Write-Verbose 'No matching Unity projects found to update.'
+        return
+    }
+
+    $updates = @()
+    $saveRequired = $false
+
+    foreach ($target in $targets) {
+        $aliasName = $target.Alias
+        $record = $target.Record
+        $projectPathToUse = $target.Path
+
+        if (-not $projectPathToUse) {
+            Write-Warning "Skipping '$aliasName' because no project path is stored."
+            continue
+        }
+
+        if (-not (Test-Path -LiteralPath $projectPathToUse)) {
+            Write-Warning "Skipping '$aliasName' because path '$projectPathToUse' does not exist."
+            continue
+        }
+
+        if (-not (Test-IsUnityProject -Path $projectPathToUse)) {
+            Write-Warning "Skipping '$aliasName' because '$projectPathToUse' is not a Unity project."
+            continue
+        }
+
+        $projectInfo = Get-UnityProjectInfo -Path $projectPathToUse
+        $changes = @()
+
+        if ($projectInfo.UnityVersion -and $record.UnityVersion -ne $projectInfo.UnityVersion) {
+            $changes += "version $($record.UnityVersion) -> $($projectInfo.UnityVersion)"
+        }
+
+        if ($projectInfo.Name -and $record.Name -ne $projectInfo.Name) {
+            $changes += "name '$($record.Name)' -> '$($projectInfo.Name)'"
+        }
+
+        if ($projectInfo.Path -and -not [string]::Equals($record.Path, $projectInfo.Path, $comparisonType)) {
+            $changes += 'path updated'
+        }
+
+        if ($changes.Count -eq 0) {
+            Write-Verbose "Unity project '$aliasName' is already up to date."
+            if ($PassThru) {
+                $updates += [PSCustomObject]@{
+                    Alias = $aliasName
+                    UnityVersion = $record.UnityVersion
+                    Path = $record.Path
+                    Updated = $false
+                    Changes = @()
+                }
+            }
+            continue
+        }
+
+        if (-not $projectInfo.UnityVersion -or $projectInfo.UnityVersion -eq 'Unknown') {
+            Write-Warning "Skipping '$aliasName' because the Unity version could not be determined."
+            continue
+        }
+
+        $actionDescription = "Update Unity project '$aliasName' ($($changes -join ', '))"
+        if (-not $PSCmdlet.ShouldProcess($projectPathToUse, $actionDescription)) {
+            continue
+        }
+
+        $record.UnityVersion = $projectInfo.UnityVersion
+        $record.Name = $projectInfo.Name
+        $record.Path = $projectInfo.Path
+
+        if (-not $record.ContainsKey('DateAdded') -or -not $record.DateAdded) {
+            $record.DateAdded = $projectInfo.DateAdded
+        }
+
+        if (-not $record.ContainsKey('LastOpened')) {
+            $record.LastOpened = $projectInfo.LastOpened
+        }
+
+        $updates += [PSCustomObject]@{
+            Alias = $aliasName
+            UnityVersion = $record.UnityVersion
+            Path = $record.Path
+            Updated = $true
+            Changes = $changes
+        }
+
+        $saveRequired = $true
+    }
+
+    if ($saveRequired) {
+        Save-UnityProjectsData -ProjectsData $projectsData
+        foreach ($update in $updates | Where-Object { $_.Updated }) {
+            Write-Host "Updated Unity project '$($update.Alias)' to version $($update.UnityVersion)" -ForegroundColor Green
+        }
+    } else {
+        Write-Verbose 'No Unity project metadata needed updating.'
+    }
+
+    if ($PassThru -and $updates.Count -gt 0) {
+        return $updates
+    }
 }
 
 function Get-UnityProjects {
@@ -999,7 +1337,11 @@ function Open-UnityProject {
     Opens a Unity project.
 
     .DESCRIPTION
-    Opens a Unity project either by path, alias, or from pipeline input.
+    Opens a Unity project either by path, alias, or from pipeline input. The command inspects
+    ProjectVersion.txt and compares it with the stored metadata so you are warned when a project has
+    moved to a different Unity release. Supply -AutoUpdate to refresh the saved version immediately.
+    In automation (POWERSHELL_MAGIC_NON_INTERACTIVE=1) Unity Hub prompts and editor launches are
+    skipped so CI scripts remain non-blocking.
 
     .PARAMETER ProjectPath
     The path to the Unity project.
@@ -1009,6 +1351,11 @@ function Open-UnityProject {
 
     .PARAMETER UnityHubPath
     Path to Unity Hub executable.
+
+    .PARAMETER AutoUpdate
+    Automatically refresh saved Unity metadata when the project version changes. Uses the saved alias
+    when supplied, or the resolved project path, and mirrors the behaviour enabled by setting
+    POWERSHELL_MAGIC_UNITEA_AUTOUPDATE_STARTUP=1 for startup checks.
 
     .PARAMETER InputObject
     Alias name from pipeline input.
@@ -1022,11 +1369,12 @@ function Open-UnityProject {
     .EXAMPLE
     Get-UnityProjects -Alias "myGame" -Path | Set-Location
     #>
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess = $true)]
     param(
         [string]$ProjectPath,
         [string]$Alias,
         [string]$UnityHubPath = (Get-UnityHubDefaultPath),
+        [switch]$AutoUpdate,
         [Parameter(ValueFromPipeline = $true)]
         [string]$InputObject
     )
@@ -1037,12 +1385,19 @@ function Open-UnityProject {
             $Alias = $InputObject.Trim()
         }
 
+        $isNonInteractive = Test-IsNonInteractiveMode
+        $projectsData = $null
+        $storedRecord = $null
+        $storedAlias = $null
+
         # If alias is provided, get the project path from saved projects
         if ($Alias) {
             $projectsData = Get-UnityProjectsData
             if ($projectsData.ContainsKey($Alias)) {
-                $ProjectPath = $projectsData[$Alias].Path
-                Write-Host "Opening saved project '$Alias': $($projectsData[$Alias].Name)" -ForegroundColor Green
+                $storedRecord = $projectsData[$Alias]
+                $storedAlias = $Alias
+                $ProjectPath = $storedRecord.Path
+                Write-Host "Opening saved project '$Alias': $($storedRecord.Name)" -ForegroundColor Green
             } else {
                 Write-Error "No project found with alias '$Alias'"
                 if ($projectsData.Count -gt 0) {
@@ -1072,6 +1427,13 @@ function Open-UnityProject {
             return
         }
 
+        $resolvedProjectPath = $ProjectPath
+        try {
+            $resolvedProjectPath = (Resolve-Path -Path $ProjectPath -ErrorAction Stop).Path
+        } catch {
+            # Fall back to provided path
+        }
+
         # Read Unity version from ProjectVersion.txt
         try {
             $versionContent = Get-Content $projectVersionFile | Where-Object { $_.StartsWith('m_EditorVersion:') }
@@ -1084,6 +1446,98 @@ function Open-UnityProject {
         } catch {
             Write-Error "Failed to read Unity version: $($_.Exception.Message)"
             return
+        }
+
+        # Locate stored record by path if alias not supplied
+        if (-not $storedRecord) {
+            if (-not $projectsData) {
+                $projectsData = Get-UnityProjectsData
+            }
+
+            $comparisonType = if ($script:IsWindows) {
+                [System.StringComparison]::OrdinalIgnoreCase
+            } else {
+                [System.StringComparison]::Ordinal
+            }
+
+            $matchedEntry = $projectsData.GetEnumerator() | Where-Object {
+                $candidatePath = $_.Value.Path
+                if (-not $candidatePath) {
+                    return $false
+                }
+
+                $candidateResolved = $candidatePath
+                try {
+                    $candidateResolved = (Resolve-Path -Path $candidatePath -ErrorAction Stop).Path
+                } catch {
+                    # Use stored path if resolution fails
+                }
+
+                return [string]::Equals($candidateResolved, $resolvedProjectPath, $comparisonType)
+            } | Select-Object -First 1
+
+            if ($matchedEntry) {
+                $storedRecord = $matchedEntry.Value
+                if (-not $storedAlias) {
+                    $storedAlias = $matchedEntry.Key
+                }
+            }
+        }
+
+        # Warn or auto-sync when metadata is stale
+        $storedVersion = $null
+        if ($storedRecord -and $storedRecord.UnityVersion -and $storedRecord.UnityVersion -ne 'Unknown') {
+            $storedVersion = $storedRecord.UnityVersion
+        }
+
+        if ($storedVersion -and $storedVersion -ne $unityVersion) {
+            $context = if ($storedAlias) {
+                "for saved alias '$storedAlias'"
+            } else {
+                "for project '$($storedRecord.Name)'"
+            }
+
+            $baseMessage = "Saved Unity version $storedVersion $context differs from detected project version $unityVersion."
+
+            if ($AutoUpdate) {
+                try {
+                    $updateResult = $null
+                    if ($storedAlias) {
+                        $updateResult = Update-UnityProject -Alias $storedAlias -PassThru -Confirm:$false -ErrorAction Stop
+                        if ($updateResult -is [System.Array]) {
+                            $updateResult = $updateResult | Where-Object { $_.Alias -eq $storedAlias } | Select-Object -First 1
+                        }
+                    } else {
+                        $updateResult = Update-UnityProject -ProjectPath $resolvedProjectPath -PassThru -Confirm:$false -ErrorAction Stop
+                        if ($updateResult -is [System.Array]) {
+                            $updateResult = $updateResult | Select-Object -First 1
+                        }
+                    }
+
+                    if ($updateResult -and $updateResult.Updated) {
+                        Write-Host "Synchronized stored Unity version to $unityVersion." -ForegroundColor Green
+                        if ($storedAlias) {
+                            $projectsData = Get-UnityProjectsData
+                            if ($projectsData.ContainsKey($storedAlias)) {
+                                $storedRecord = $projectsData[$storedAlias]
+                            }
+                        } elseif ($storedRecord.ContainsKey('UnityVersion')) {
+                            $storedRecord.UnityVersion = $unityVersion
+                        }
+                    } else {
+                        Write-Warning "$baseMessage Auto-update did not apply any changes."
+                    }
+                } catch {
+                    Write-Warning "$baseMessage Auto-update failed: $($_.Exception.Message)"
+                }
+            } else {
+                Write-Warning $baseMessage
+                if ($storedAlias) {
+                    Write-Host "Run 'unity-update $storedAlias' to sync metadata with the project." -ForegroundColor Yellow
+                } else {
+                    Write-Host "Run 'Update-UnityProject -ProjectPath ""$resolvedProjectPath""' to sync metadata with the project." -ForegroundColor Yellow
+                }
+            }
         }
 
         # Try to find Unity installation
@@ -1108,11 +1562,16 @@ function Open-UnityProject {
         if (-not $unityEditorPath) {
             Write-Warning "Unity version $unityVersion not found locally."
 
+            if ($isNonInteractive) {
+                Write-Verbose 'Skipping Unity Hub prompt due to non-interactive mode.'
+                return
+            }
+
             Write-Host 'Opening Unity Hub to install/select Unity version...'
             $choice = Read-Host 'Do you want to open Unity Hub to install the required version? (Y/n)'
             if ($choice -notmatch '^[Nn]') {
                 if (Start-UnityHubForProject -UnityHubPath $UnityHubPath -ProjectPath $ProjectPath) {
-                    Update-LastOpened -ProjectPath $ProjectPath -Alias $Alias
+                    Update-LastOpened -ProjectPath $ProjectPath -Alias $storedAlias
                     return
                 }
 
@@ -1133,28 +1592,157 @@ function Open-UnityProject {
             $projectArgument = if ($script:IsWindows) { "`"$ProjectPath`"" } else { $ProjectPath }
             $arguments = @('-projectPath', $projectArgument)
 
-            Start-Process -FilePath $unityEditorPath -ArgumentList $arguments -NoNewWindow:$false
-            Write-Host 'Unity launched successfully!'
+            if ($isNonInteractive) {
+                Write-Verbose 'Skipping Unity launch in non-interactive mode.'
+            } elseif ($PSCmdlet.ShouldProcess("Unity project at $ProjectPath", 'Launch Unity Editor')) {
+                Start-Process -FilePath $unityEditorPath -ArgumentList $arguments -NoNewWindow:$false
+                Write-Host 'Unity launched successfully!'
 
-            # Update the last opened time
-            Update-LastOpened -ProjectPath $ProjectPath -Alias $Alias
+                # Update the last opened time
+                Update-LastOpened -ProjectPath $ProjectPath -Alias $storedAlias
+            } else {
+                Write-Verbose 'Launch skipped by ShouldProcess.'
+            }
         } catch {
             Write-Error "Failed to launch Unity: $($_.Exception.Message)"
         }
     }
 }
 
+function Invoke-UniteaStartupSyncCheck {
+    <#
+    .SYNOPSIS
+    Performs a once-per-session metadata sync check for saved Unity projects.
+
+    .DESCRIPTION
+    Runs the same detection logic as Get-UnityProjectSyncStatus when the module loads. The first call
+    per session emits warnings for any out-of-sync projects and, when the environment variable
+    POWERSHELL_MAGIC_UNITEA_AUTOUPDATE_STARTUP is set to 1/true/on, automatically invokes
+    Update-UnityProject to refresh metadata. Set POWERSHELL_MAGIC_UNITEA_DISABLE_STARTUP_CHECK to
+    suppress the scan entirely.
+
+    .PARAMETER Force
+    Forces the check to run even if it has already completed this session.
+
+    .PARAMETER PassThru
+    Returns the detected issues for further processing.
+
+    .EXAMPLE
+    Invoke-UniteaStartupSyncCheck -Force
+    Re-runs the startup check immediately and emits warnings for any detected drift.
+
+    .EXAMPLE
+    Invoke-UniteaStartupSyncCheck -Force -PassThru
+    Returns the issue objects so scripts can inspect or report them.
+    #>
+    [CmdletBinding()]
+    param(
+        [switch]$Force,
+        [switch]$PassThru
+    )
+
+    if (-not $Force -and $script:StartupSyncCheckCompleted) {
+        return
+    }
+
+    $script:StartupSyncCheckCompleted = $true
+
+    if (Test-EnvironmentToggle -Value $env:POWERSHELL_MAGIC_UNITEA_DISABLE_STARTUP_CHECK) {
+        return
+    }
+
+    $issues = Get-UnityProjectSyncStatus
+    $issues = @($issues | Where-Object { $_.Status -ne 'InSync' })
+
+    if ($issues.Count -eq 0) {
+        if ($PassThru) {
+            return @()
+        }
+        return
+    }
+
+    $autoUpdateEnabled = Test-EnvironmentToggle -Value $env:POWERSHELL_MAGIC_UNITEA_AUTOUPDATE_STARTUP
+    $results = @()
+
+    foreach ($issue in $issues) {
+        $result = [PSCustomObject]@{
+            Alias = $issue.Alias
+            Status = $issue.Status
+            Path = $issue.Path
+            StoredVersion = $issue.StoredVersion
+            ActualVersion = $issue.ActualVersion
+            Resolved = $false
+            Message = $issue.Message
+        }
+
+        switch ($issue.Status) {
+            'VersionMismatch' {
+                $context = "Saved Unity version $($issue.StoredVersion) for '$($issue.Alias)' differs from project version $($issue.ActualVersion)."
+                if ($autoUpdateEnabled) {
+                    try {
+                        $updateResult = Update-UnityProject -Alias $issue.Alias -PassThru -Confirm:$false -ErrorAction Stop
+                        if ($updateResult -is [System.Array]) {
+                            $updateResult = $updateResult | Where-Object { $_.Alias -eq $issue.Alias } | Select-Object -First 1
+                        }
+                        if ($updateResult -and $updateResult.Updated) {
+                            $result.Resolved = $true
+                            $result.Status = 'VersionMismatchResolved'
+                            $result.StoredVersion = $issue.ActualVersion
+                            $result.Message = "Stored version synchronized to $($issue.ActualVersion)."
+                        } else {
+                            $result.Message = "$context Auto-update did not apply any changes."
+                            Write-Warning $result.Message
+                        }
+                    } catch {
+                        $result.Message = "$context Auto-update failed: $($_.Exception.Message)"
+                        Write-Warning $result.Message
+                    }
+                } else {
+                    $result.Message = $context
+                    Write-Warning $context
+                    Write-Host "Run 'unity-update $($issue.Alias)' to synchronize metadata." -ForegroundColor Yellow
+                }
+            }
+            'PathMissing' {
+                $message = "Unity project '$($issue.Alias)' references missing path '$($issue.Path)'."
+                $result.Message = $message
+                Write-Warning $message
+            }
+            'NotUnityProject' {
+                $message = "Saved project '$($issue.Alias)' no longer contains Unity project assets at '$($issue.Path)'."
+                $result.Message = $message
+                Write-Warning $message
+            }
+            default {
+                if ($issue.Message) {
+                    Write-Warning $issue.Message
+                }
+            }
+        }
+
+        $results += $result
+    }
+
+    if ($PassThru) {
+        return $results
+    }
+}
+
 # Set up aliases
 Set-Alias -Name 'unity' -Value 'Open-UnityProject'
 Set-Alias -Name 'unity-add' -Value 'Add-UnityProject'
+Set-Alias -Name 'unity-check' -Value 'Get-UnityProjectSyncStatus'
 Set-Alias -Name 'unity-list' -Value 'Get-UnityProjects'
 Set-Alias -Name 'unity-remove' -Value 'Remove-UnityProject'
 Set-Alias -Name 'unity-recent' -Value 'Open-RecentUnityProject'
 Set-Alias -Name 'unity-config' -Value 'Get-UnityConfigPath'
 
+# Perform startup sync check once per session
+Invoke-UniteaStartupSyncCheck | Out-Null
+
 
 # Enhanced argument completer with project info
-Register-ArgumentCompleter -CommandName 'Get-UnityProjects', 'Remove-UnityProject', 'Open-UnityProject', 'unity', 'unity-list', 'unity-remove' -ParameterName 'Alias' -ScriptBlock {
+Register-ArgumentCompleter -CommandName 'Get-UnityProjects', 'Remove-UnityProject', 'Open-UnityProject', 'Update-UnityProject', 'Get-UnityProjectSyncStatus', 'unity', 'unity-list', 'unity-remove', 'unity-update', 'unity-check' -ParameterName 'Alias' -ScriptBlock {
     param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
 
     try {
@@ -1174,7 +1762,7 @@ Register-ArgumentCompleter -CommandName 'Get-UnityProjects', 'Remove-UnityProjec
 }
 
 # Register completer for the aliases as well
-Register-ArgumentCompleter -CommandName 'unity', 'unity-list', 'unity-remove' -ParameterName 'Alias' -ScriptBlock {
+Register-ArgumentCompleter -CommandName 'unity', 'unity-list', 'unity-remove', 'unity-update', 'unity-check' -ParameterName 'Alias' -ScriptBlock {
     param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
 
     try {
@@ -1190,8 +1778,11 @@ Register-ArgumentCompleter -CommandName 'unity', 'unity-list', 'unity-remove' -P
 Export-ModuleMember -Function @(
     'Open-UnityProject',
     'Add-UnityProject',
+    'Update-UnityProject',
+    'Get-UnityProjectSyncStatus',
+    'Invoke-UniteaStartupSyncCheck',
     'Get-UnityProjects',
     'Remove-UnityProject',
     'Open-RecentUnityProject',
     'Get-UnityConfigPath'
-) -Alias @('unity', 'unity-add', 'unity-list', 'unity-remove', 'unity-recent', 'unity-config')
+) -Alias @('unity', 'unity-add', 'unity-update', 'unity-check', 'unity-list', 'unity-remove', 'unity-recent', 'unity-config')

@@ -8,12 +8,15 @@
     FunctionsToExport = @(
         'Open-UnityProject',
         'Add-UnityProject',
+        'Update-UnityProject',
+        'Get-UnityProjectSyncStatus',
+        'Invoke-UniteaStartupSyncCheck',
         'Get-UnityProjects',
         'Remove-UnityProject',
         'Open-RecentUnityProject',
         'Get-UnityConfigPath'
     )
-    AliasesToExport = @('unity', 'unity-add', 'unity-list', 'unity-remove', 'unity-recent', 'unity-config')
+    AliasesToExport = @('unity', 'unity-add', 'unity-update', 'unity-check', 'unity-list', 'unity-remove', 'unity-recent', 'unity-config')
     PrivateData = @{
         PSData = @{
             Tags = @('Unity', 'ProjectManagement', 'FZF')
