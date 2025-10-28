@@ -482,11 +482,11 @@ function Get-FileHash-Remote {
             $ProgressPreference = $progressPreference
         }
 
-        if (-not (Test-Path $tempFile)) {
+        if (-not (Test-Path -LiteralPath $tempFile)) {
             throw 'Download failed - file not created'
         }
 
-        $hash = Get-FileHash -Path $tempFile -Algorithm SHA256 -ErrorAction Stop
+        $hash = Get-FileHash -LiteralPath $tempFile -Algorithm SHA256 -ErrorAction Stop
         Write-Success "Successfully calculated hash for $DependencyName"
         return $hash.Hash
 
@@ -494,8 +494,8 @@ function Get-FileHash-Remote {
         Write-ErrorMessage "Failed to download and hash $DependencyName from $Url`: $($_.Exception.Message)"
         return $null
     } finally {
-        if (Test-Path $tempFile) {
-            Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $tempFile) {
+            Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue
         }
     }
 }
