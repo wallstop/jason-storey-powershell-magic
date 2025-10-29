@@ -323,13 +323,18 @@ function ConvertTo-UnityProjectRecord {
     $lastOpenedDate = $null
 
     if ($lastOpenedString -and $lastOpenedString -ne 'Never') {
-        [DateTime]::TryParseExact(
+        $parsedLastOpened = [DateTime]::MinValue
+        $parsed = [DateTime]::TryParseExact(
             $lastOpenedString,
             'yyyy-MM-dd HH:mm:ss',
-            $null,
+            [System.Globalization.CultureInfo]::InvariantCulture,
             [System.Globalization.DateTimeStyles]::AssumeLocal,
-            [ref]$lastOpenedDate
-        ) | Out-Null
+            [ref]$parsedLastOpened
+        )
+
+        if ($parsed) {
+            $lastOpenedDate = $parsedLastOpened
+        }
     }
 
     return [PSCustomObject]@{

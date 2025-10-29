@@ -684,7 +684,7 @@ Yes! GitHub Discussions or Issues.
 ### Is there a community?
 
 - GitHub Discussions:
-  <https://github.com/wallstop/jason-storey-powershell-magic/discussions>
+  <https://github.com/wallstop/jason-storey-powershell-magic/issues>
 - Issues: Bug reports and feature requests
 
 ---

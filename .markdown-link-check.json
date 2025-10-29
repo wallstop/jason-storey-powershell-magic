@@ -1,0 +1,32 @@
+{
+    "retryCount": 2,
+    "retryOn429": true,
+    "timeout": "20s",
+    "aliveStatusCodes": [
+        200,
+        201,
+        202,
+        203,
+        204,
+        206,
+        207,
+        208,
+        226,
+        301,
+        302,
+        303,
+        307,
+        308,
+        403,
+        429
+    ],
+    "headers": {
+        "User-Agent": "PowerShellMagicDocsLinkChecker/1.0 (+https://github.com/wallstop/jason-storey-powershell-magic)"
+    },
+    "ignorePatterns": [
+        { "pattern": "^mailto:" },
+        { "pattern": "^tel:" },
+        { "pattern": "^#" },
+        { "pattern": "^javascript:" }
+    ]
+}

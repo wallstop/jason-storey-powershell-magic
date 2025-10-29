@@ -743,7 +743,7 @@ Get-Content $PROFILE
 
 3. **Community support:**
    - GitHub Discussions:
-     <https://github.com/wallstop/jason-storey-powershell-magic/discussions>
+     <https://github.com/wallstop/jason-storey-powershell-magic/issues>
 
 ---
 

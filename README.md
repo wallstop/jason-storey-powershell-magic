@@ -998,7 +998,7 @@ Just keep the license notice.
 ## 💬 Support & Feedback
 
 - **Issues:** [GitHub Issues][link-issues]
-- **Discussions:** [GitHub Discussions][link-discussions]
+- **Support:** [GitHub Issues][link-support]
 - **Documentation:** [docs/](docs/)
 
 ---
@@ -1040,6 +1040,5 @@ faster, anywhere._
   https://img.shields.io/badge/Platform-Linux-FCC624?logo=linux&logoColor=black
 [link-pwsh]: https://github.com/PowerShell/PowerShell
 [link-issues]: https://github.com/wallstop/jason-storey-powershell-magic/issues
-[link-discussions]:
-  https://github.com/wallstop/jason-storey-powershell-magic/discussions
+[link-support]: https://github.com/wallstop/jason-storey-powershell-magic/issues
 [link-ms-docs]: https://docs.microsoft.com/en-us/powershell/

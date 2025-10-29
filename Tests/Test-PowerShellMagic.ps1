@@ -30,7 +30,7 @@ Run all tests with detailed output
 
 [CmdletBinding()]
 param(
-    [ValidateSet('Setup', 'Common', 'QuickJump', 'Templater', 'Unitea', 'All')]
+    [ValidateSet('Setup', 'Common', 'QuickJump', 'Templater', 'Unitea', 'Packaging', 'All')]
     [string]$TestName = 'All'
 )
 
@@ -571,6 +571,100 @@ function Test-QuickJump {
             Assert-NotNull -Value $command -Message "Command $cmd exists"
         }
 
+        $quickJumpTestRoot = $null
+        $previousQuickJumpConfig = $env:XDG_CONFIG_HOME
+
+        try {
+            $quickJumpTestRoot = Join-Path $PSScriptRoot '..\TestArtifacts\QuickJump'
+            if (Test-Path $quickJumpTestRoot) {
+                Remove-Item -Path $quickJumpTestRoot -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            New-Item -ItemType Directory -Path $quickJumpTestRoot -Force | Out-Null
+
+            $env:XDG_CONFIG_HOME = $quickJumpTestRoot
+            Remove-Item Env:POWERSHELL_MAGIC_NON_INTERACTIVE -ErrorAction SilentlyContinue
+
+            $projectsPath = Join-Path $quickJumpTestRoot 'workspace\projects\alpha'
+            $sandboxPath = Join-Path $quickJumpTestRoot 'workspace\sandbox\notes'
+            New-Item -ItemType Directory -Path $projectsPath -Force | Out-Null
+            New-Item -ItemType Directory -Path $sandboxPath -Force | Out-Null
+
+            Add-QuickJumpPath -Path $projectsPath -Alias 'alpha' -Category 'projects' -Force
+            Add-QuickJumpPath -Path $sandboxPath -Alias 'notes' -Category 'sandbox' -Force
+
+            $categoryObjects = @(Get-QuickJumpCategories)
+            Assert-Equal -Expected 2 -Actual $categoryObjects.Count -Message 'Category listing returns expected entries'
+
+            $projectsCategory = $categoryObjects | Where-Object { $_.Category -eq 'projects' } | Select-Object -First 1
+            $sandboxCategory = $categoryObjects | Where-Object { $_.Category -eq 'sandbox' } | Select-Object -First 1
+            Assert-NotNull -Value $projectsCategory -Message 'Projects category present'
+            Assert-Equal -Expected 1 -Actual $projectsCategory.Count -Message 'Projects category tracks path count'
+            Assert-NotNull -Value $sandboxCategory -Message 'Sandbox category present'
+            Assert-Equal -Expected 1 -Actual $sandboxCategory.Count -Message 'Sandbox category tracks path count'
+
+            $categoryNames = @(Get-QuickJumpCategories -Name)
+            Assert-True -Condition ($categoryNames -contains 'projects') -Message 'Category names include projects'
+            Assert-True -Condition ($categoryNames -contains 'sandbox') -Message 'Category names include sandbox'
+
+            $quickJumpModule = Get-Module QuickJump
+            $projectsPathResolved = (Resolve-Path $projectsPath -ErrorAction Stop).Path
+            $sandboxPathResolved = (Resolve-Path $sandboxPath -ErrorAction Stop).Path
+
+            $null = $quickJumpModule.Invoke({ param($path, $alias)
+                    Update-PathUsage -Path $path -Alias $alias
+                }, $projectsPathResolved, 'alpha')
+
+            Start-Sleep -Seconds 1
+
+            $null = $quickJumpModule.Invoke({ param($path, $alias)
+                    Update-PathUsage -Path $path -Alias $alias
+                }, $sandboxPathResolved, 'notes')
+
+            $recentPath = Open-QuickJumpRecent -Path
+            Assert-Equal -Expected $sandboxPathResolved -Actual $recentPath -Message 'Open-QuickJumpRecent returns the most recently used path'
+
+            $categoryScript = Join-Path $quickJumpTestRoot 'InvokeCategorySelection.ps1'
+            $modulePath = Join-Path $PSScriptRoot '..\Modules\QuickJump'
+            @'
+param(
+    [string]$ModulePath,
+    [string]$ConfigRoot
+)
+Import-Module $ModulePath -Force
+Remove-Item Env:POWERSHELL_MAGIC_NON_INTERACTIVE -ErrorAction SilentlyContinue
+$env:XDG_CONFIG_HOME = $ConfigRoot
+Set-Item Function:Test-FzfAvailable -Value ([ScriptBlock]::Create('return $false')) -Force
+$script:Responses = [System.Collections.Generic.Queue[string]]::new()
+$script:Responses.Enqueue('1')
+$script:Responses.Enqueue('1')
+Set-Item Function:Read-Host -Value {
+    param($Prompt)
+    if ($script:Responses.Count -gt 0) {
+        return $script:Responses.Dequeue()
+    }
+    return ''
+} -Force
+$result = Invoke-QuickJumpCategory -Path
+Write-Output $result
+'@ | Set-Content -Path $categoryScript -Encoding UTF8
+
+            $categoryResult = & pwsh -NoLogo -NoProfile -File $categoryScript -ModulePath $modulePath -ConfigRoot $quickJumpTestRoot
+            $selectedPath = ($categoryResult | Where-Object { $_ } | Select-Object -Last 1).Trim()
+            Assert-Equal -Expected $projectsPathResolved -Actual $selectedPath -Message 'Invoke-QuickJumpCategory returns selected path via fallback navigation'
+
+            Remove-Item -Path $categoryScript -Force -ErrorAction SilentlyContinue
+        } finally {
+            if ($previousQuickJumpConfig) {
+                $env:XDG_CONFIG_HOME = $previousQuickJumpConfig
+            } else {
+                Remove-Item Env:XDG_CONFIG_HOME -ErrorAction SilentlyContinue
+            }
+
+            if ($quickJumpTestRoot -and (Test-Path $quickJumpTestRoot)) {
+                Remove-Item -Path $quickJumpTestRoot -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+
         # Test configuration path function (if it exists)
         $configFunc = Get-Command 'Get-QuickJumpConfigPath' -ErrorAction SilentlyContinue
         if ($configFunc) {
@@ -807,6 +901,77 @@ if (Test-Path (Join-Path \$DeployPath 'sample.txt')) { Write-Output 'SUCCESS' } 
                 }
                 if ($variableRoot -and (Test-Path $variableRoot)) {
                     Remove-Item -Path $variableRoot -Recurse -Force -ErrorAction SilentlyContinue
+                }
+            }
+
+            # Template lifecycle: update, export/import, stats verification
+            $lifecycleAlias = $null
+            try {
+                $lifecycleRoot = Join-Path $templaterTestRoot 'Lifecycle'
+                if (Test-Path $lifecycleRoot) {
+                    Remove-Item -Path $lifecycleRoot -Recurse -Force -ErrorAction SilentlyContinue
+                }
+                New-Item -ItemType Directory -Path $lifecycleRoot -Force | Out-Null
+
+                $sourcePath = Join-Path $lifecycleRoot 'Source'
+                New-Item -ItemType Directory -Path $sourcePath -Force | Out-Null
+
+                $docsPath = Join-Path $sourcePath 'docs'
+                New-Item -ItemType Directory -Path $docsPath -Force | Out-Null
+
+                Set-Content -Path (Join-Path $sourcePath 'template.txt') -Value 'original content' -Encoding UTF8 -Force
+                Set-Content -Path (Join-Path $docsPath 'preview.md') -Value '# Preview' -Encoding UTF8 -Force
+
+                $lifecycleAlias = "templater-lifecycle-$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
+                Add-Template -Alias $lifecycleAlias -Path $sourcePath -Description 'Lifecycle template' -Category 'lifecycle' -Tags @('initial') -Type 'Folder' -Force | Out-Null
+
+                $updatedDescription = 'Updated lifecycle template'
+                $updatedCategory = 'lifecycle-updated'
+                $updatedTags = @('updated', 'lifecycle')
+                Update-Template -Alias $lifecycleAlias -Description $updatedDescription -Category $updatedCategory -Tags $updatedTags -PreviewFile 'docs/preview.md'
+
+                $configPath = Get-TemplaterConfigPath
+                $configData = Get-Content -Path $configPath -Raw -ErrorAction Stop | ConvertFrom-Json -AsHashtable
+                $templateRecord = $configData[$lifecycleAlias]
+                Assert-NotNull -Value $templateRecord -Message 'Lifecycle template exists after update'
+                Assert-Equal -Expected $updatedDescription -Actual $templateRecord.Description -Message 'Template description updated'
+                Assert-Equal -Expected $updatedCategory -Actual $templateRecord.Category -Message 'Template category updated'
+                Assert-Equal -Expected $updatedTags.Length -Actual ($templateRecord.Tags.Count) -Message 'Template tags updated count'
+
+                $deployPath = Join-Path $lifecycleRoot 'Deploy'
+                New-Item -ItemType Directory -Path $deployPath -Force | Out-Null
+                Use-Template -Alias $lifecycleAlias -DestinationPath $deployPath -Force | Out-Null
+
+                $configData = Get-Content -Path $configPath -Raw -ErrorAction Stop | ConvertFrom-Json -AsHashtable
+                $templateRecord = $configData[$lifecycleAlias]
+                Assert-True -Condition ([int]$templateRecord.UseCount -ge 1) -Message 'Template use count increments after deployment'
+                Assert-True -Condition (-not [string]::IsNullOrWhiteSpace($templateRecord.LastUsed)) -Message 'Template last used timestamp captured'
+
+                $exportPath = Join-Path $lifecycleRoot 'templates-export.json'
+                Export-Templates -Path $exportPath -IncludeUsageStats
+                Assert-True -Condition (Test-Path $exportPath) -Message 'Templates exported to file'
+
+                Remove-Template -Alias $lifecycleAlias -Force -ErrorAction SilentlyContinue
+                $configData = Get-Content -Path $configPath -Raw -ErrorAction Stop | ConvertFrom-Json -AsHashtable
+                Assert-True -Condition (-not $configData.ContainsKey($lifecycleAlias)) -Message 'Template removed prior to import'
+
+                Import-Templates -Path $exportPath -Overwrite
+                $configData = Get-Content -Path $configPath -Raw -ErrorAction Stop | ConvertFrom-Json -AsHashtable
+                $templateRecord = $configData[$lifecycleAlias]
+                Assert-NotNull -Value $templateRecord -Message 'Template restored after import'
+                Assert-Equal -Expected $updatedDescription -Actual $templateRecord.Description -Message 'Imported template retains updated description'
+                Assert-True -Condition ([int]$templateRecord.UseCount -ge 1) -Message 'Imported template retains usage stats'
+
+                $statsOutput = (Get-TemplateStats -ShowTop 5 2>&1) | Out-String
+                Assert-True -Condition ($statsOutput -match $lifecycleAlias) -Message 'Template stats output includes lifecycle template'
+            } catch {
+                Write-TestWarning "Templater lifecycle regression: $($_.Exception.Message)"
+            } finally {
+                if ($lifecycleAlias) {
+                    Remove-Template -Alias $lifecycleAlias -Force -ErrorAction SilentlyContinue
+                }
+                if ($lifecycleRoot -and (Test-Path $lifecycleRoot)) {
+                    Remove-Item -Path $lifecycleRoot -Recurse -Force -ErrorAction SilentlyContinue
                 }
             }
 
@@ -1370,11 +1535,120 @@ if (@($remaining).Count -eq 0) {
 
             $secondAlias = "unitea-test-$([System.Guid]::NewGuid().ToString('N').Substring(0, 8))"
             Add-UnityProject -Alias $secondAlias -ProjectPath $secondProjectPath -Force -ErrorAction Stop
+            $secondResolvedPath = (Resolve-Path $secondProjectPath -ErrorAction Stop).Path
 
-            # Startup sync detection and optional auto-update
+            $uniteaModule = Get-Module Unitea
+            if ($uniteaModule) {
+                try {
+                    $null = $uniteaModule.Invoke({ param($path, $alias) Update-LastOpened -ProjectPath $path -Alias $alias }, $resolvedProjectPath, $alias)
+                    Start-Sleep -Seconds 1
+                    $null = $uniteaModule.Invoke({ param($path, $alias) Update-LastOpened -ProjectPath $path -Alias $alias }, $secondResolvedPath, $secondAlias)
+                } catch {
+                    Write-TestWarning "Unable to prime recent-project metadata: $($_.Exception.Message)"
+                }
+            }
+
+            $recentPath = Open-RecentUnityProject -Path
+            Assert-Equal -Expected $secondResolvedPath -Actual $recentPath -Message 'Open-RecentUnityProject -Path returns most recently opened project path'
+
+            $capturedInvocation = $null
+            if ($uniteaModule) {
+                $overrideBody = @'
+param(
+    [Parameter(ValueFromPipeline = $true)]
+    $InputObject,
+    [string]$ProjectPath,
+    [string]$Alias,
+    [string]$UnityHubPath,
+    [switch]$AutoUpdate,
+    [switch]$PassThru
+)
+$script:OpenRecentInvocation = @{
+    InputObject = $InputObject
+    ProjectPath = $ProjectPath
+    Alias = $Alias
+    AutoUpdate = $AutoUpdate.IsPresent
+    PassThru = $PassThru.IsPresent
+}
+return $ProjectPath
+'@
+
+                $overrideApplied = $false
+                try {
+                    $uniteaModule.Invoke({
+                            param($definition)
+                            $script:OpenRecentInvocation = $null
+                            $script:OriginalOpenUnityProject = (Get-Item Function:Open-UnityProject).ScriptBlock
+                            Set-Item Function:Open-UnityProject -Value ([ScriptBlock]::Create($definition)) -Force
+                        }, $overrideBody) | Out-Null
+                    $overrideApplied = $true
+                } catch {
+                    Write-TestWarning "Unable to override Open-UnityProject for recent-project verification: $($_.Exception.Message)"
+                }
+
+                if ($overrideApplied) {
+                    $previousNonInteractiveRecent = $env:POWERSHELL_MAGIC_NON_INTERACTIVE
+                    $env:POWERSHELL_MAGIC_NON_INTERACTIVE = '1'
+                    try {
+                        $null = Open-RecentUnityProject
+                    } finally {
+                        if ($null -ne $previousNonInteractiveRecent) {
+                            $env:POWERSHELL_MAGIC_NON_INTERACTIVE = $previousNonInteractiveRecent
+                        } else {
+                            Remove-Item Env:\POWERSHELL_MAGIC_NON_INTERACTIVE -ErrorAction SilentlyContinue
+                        }
+
+                        $uniteaModule.Invoke({
+                                if ($script:OriginalOpenUnityProject) {
+                                    Set-Item Function:Open-UnityProject -Value $script:OriginalOpenUnityProject -Force
+                                    Remove-Variable -Name OriginalOpenUnityProject -Scope Script -ErrorAction SilentlyContinue
+                                }
+                            }) | Out-Null
+                    }
+
+                    $capturedInvocation = $uniteaModule.Invoke({ $script:OpenRecentInvocation })
+                    if ($capturedInvocation) {
+                        $capturedInvocation = $capturedInvocation | Select-Object -First 1
+                    }
+                    $uniteaModule.Invoke({ Remove-Variable -Name OpenRecentInvocation -Scope Script -ErrorAction SilentlyContinue }) | Out-Null
+                }
+            }
+
+            Assert-NotNull -Value $capturedInvocation -Message 'Open-RecentUnityProject triggers Open-UnityProject invocation'
+            Assert-Equal -Expected $secondAlias -Actual $capturedInvocation.Alias -Message 'Open-RecentUnityProject routes most recent alias to Open-UnityProject'
+            Assert-Equal -Expected $secondResolvedPath -Actual $capturedInvocation.ProjectPath -Message 'Open-RecentUnityProject routes project path to Open-UnityProject'
+
             $startupMismatchVersion = '2020.3.5f1'
             Set-Content -Path $secondVersionFile -Value "m_EditorVersion: $startupMismatchVersion" -Encoding UTF8
 
+            $syncResults = @(Get-UnityProjectSyncStatus -IncludeInSync -ErrorAction Stop)
+            Assert-True -Condition ($syncResults.Count -ge 2) -Message 'Sync status returns entries for saved projects when IncludeInSync is used'
+            $syncLookup = @{}
+            foreach ($entry in $syncResults) {
+                $syncLookup[$entry.Alias] = $entry
+            }
+
+            $inSyncEntry = $syncLookup[$alias]
+            Assert-NotNull -Value $inSyncEntry -Message 'Sync status output contains healthy project entry'
+            Assert-Equal -Expected 'InSync' -Actual $inSyncEntry.Status -Message 'Healthy project reports InSync status'
+            Assert-Equal -Expected $autoUpdateVersion -Actual $inSyncEntry.StoredVersion -Message 'Healthy project retains stored version'
+            Assert-Equal -Expected $autoUpdateVersion -Actual $inSyncEntry.ActualVersion -Message 'Healthy project version matches on-disk value'
+
+            $driftEntry = $syncLookup[$secondAlias]
+            Assert-NotNull -Value $driftEntry -Message 'Sync status output contains drifted project entry'
+            Assert-Equal -Expected 'VersionMismatch' -Actual $driftEntry.Status -Message 'Drifted project reports VersionMismatch status'
+            Assert-Equal -Expected '2020.3.1f1' -Actual $driftEntry.StoredVersion -Message 'Drifted project retains stored version prior to refresh'
+            Assert-Equal -Expected $startupMismatchVersion -Actual $driftEntry.ActualVersion -Message 'Drifted project reports detected project version'
+
+            $driftOnly = @(Get-UnityProjectSyncStatus -ErrorAction Stop)
+            Assert-Equal -Expected 1 -Actual $driftOnly.Count -Message 'Sync status without IncludeInSync filters to out-of-sync projects'
+            Assert-Equal -Expected $secondAlias -Actual $driftOnly[0].Alias -Message 'Sync status default output targets mismatched alias'
+
+            $singleCheck = @(Get-UnityProjectSyncStatus -Alias $alias -IncludeInSync -ErrorAction Stop)
+            Assert-Equal -Expected 1 -Actual $singleCheck.Count -Message 'Sync status supports alias scoping with IncludeInSync'
+            Assert-Equal -Expected 'InSync' -Actual $singleCheck[0].Status -Message 'Alias scoping honours IncludeInSync parameter'
+
+            # Startup sync detection and optional auto-update
             $previousDisableStartup = $env:POWERSHELL_MAGIC_UNITEA_DISABLE_STARTUP_CHECK
             $previousAutoUpdateStartup = $env:POWERSHELL_MAGIC_UNITEA_AUTOUPDATE_STARTUP
             $env:POWERSHELL_MAGIC_UNITEA_DISABLE_STARTUP_CHECK = $null
@@ -1516,6 +1790,106 @@ if (@($remaining).Count -eq 0) {
     }
 }
 
+function Test-Packaging {
+    Write-Host "`n=== Testing Packaging Build ===" -ForegroundColor Yellow
+
+    $buildScript = Join-Path $PSScriptRoot '..\Scripts\Build-Modules.ps1'
+    $verifyScript = Join-Path $PSScriptRoot '..\Scripts\Test-BuildArtifacts.ps1'
+
+    Assert-FileExists -Path $buildScript -Message 'Build-Modules script exists'
+    Assert-FileExists -Path $verifyScript -Message 'Test-BuildArtifacts script exists'
+
+    if (-not (Get-Command Publish-Module -ErrorAction SilentlyContinue)) {
+        Write-TestSkipped 'Publish-Module unavailable; skipping packaging smoke test'
+        $Script:TestResults.Skipped++
+        return
+    }
+
+    $packagingRoot = Join-Path $PSScriptRoot '..\TestArtifacts\Packaging'
+    $outputRoot = Join-Path $packagingRoot 'out'
+    $packagesRoot = Join-Path $outputRoot 'packages'
+    $metadataPath = Join-Path $packagesRoot 'module-metadata.json'
+    $buildVersion = '0.0.1'
+
+    if (Test-Path -LiteralPath $packagingRoot) {
+        Remove-Item -Path $packagingRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    New-Item -ItemType Directory -Path $packagingRoot -Force | Out-Null
+
+    try {
+        $buildArgs = @(
+            '-NoLogo',
+            '-NoProfile',
+            '-File',
+            $buildScript,
+            '-Version',
+            $buildVersion,
+            '-OutputPath',
+            $outputRoot
+        )
+
+        $buildOutput = & pwsh @buildArgs 2>&1
+        $buildExitCode = $LASTEXITCODE
+        if (-not (Assert-Equal -Expected 0 -Actual $buildExitCode -Message 'Build-Modules.ps1 exits successfully')) {
+            foreach ($line in $buildOutput) {
+                Write-Host "  $line" -ForegroundColor Gray
+            }
+            return
+        }
+
+        Assert-FileExists -Path $metadataPath -Message 'module-metadata.json produced'
+
+        $packageFiles = @()
+        if (Test-Path -LiteralPath $packagesRoot) {
+            $packageFiles = Get-ChildItem -Path $packagesRoot -Filter '*.nupkg' -ErrorAction SilentlyContinue
+        }
+        Assert-True -Condition ($packageFiles.Count -ge 3) -Message 'Packaging produces nupkg files'
+
+        $verifyArgs = @(
+            '-NoLogo',
+            '-NoProfile',
+            '-File',
+            $verifyScript,
+            '-MetadataPath',
+            $metadataPath,
+            '-PackageRoot',
+            $packagesRoot
+        )
+
+        $verifyOutput = & pwsh @verifyArgs 2>&1
+        $verifyExitCode = $LASTEXITCODE
+        if (-not (Assert-Equal -Expected 0 -Actual $verifyExitCode -Message 'Test-BuildArtifacts.ps1 validates metadata')) {
+            foreach ($line in $verifyOutput) {
+                Write-Host "  $line" -ForegroundColor Gray
+            }
+            return
+        }
+
+        try {
+            $metadataJson = Get-Content -LiteralPath $metadataPath -Raw -ErrorAction Stop
+            $metadata = $metadataJson | ConvertFrom-Json -ErrorAction Stop
+            if ($metadata -isnot [System.Array]) {
+                $metadata = @($metadata)
+            }
+            Assert-True -Condition ($metadata.Count -ge 3) -Message 'Metadata describes all modules'
+
+            foreach ($entry in $metadata) {
+                $releaseNotes = if ($null -ne $entry.ReleaseNotes) { [string]$entry.ReleaseNotes } else { '' }
+                Assert-True -Condition (-not [string]::IsNullOrWhiteSpace($releaseNotes)) -Message "Release notes populated for $($entry.Name)"
+                $functionsList = if ($entry.FunctionsToExport) { @($entry.FunctionsToExport) } else { @() }
+                Assert-True -Condition ($functionsList.Count -gt 0) -Message "Functions exported listed for $($entry.Name)"
+            }
+        } catch {
+            Assert-True -Condition $false -Message "Failed to parse build metadata: $($_.Exception.Message)"
+        }
+    } finally {
+        if (Test-Path -LiteralPath $packagingRoot) {
+            Remove-Item -Path $packagingRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 function Test-FormatterAndAnalyzer {
     Write-Host "`n=== Testing Formatter and Analyzer ===" -ForegroundColor Yellow
 
@@ -1597,12 +1971,14 @@ function Main {
         'QuickJump' { Test-QuickJump }
         'Templater' { Test-Templater }
         'Unitea' { Test-Unitea }
+        'Packaging' { Test-Packaging }
         'All' {
             Test-Setup
             Test-CommonUtilities
             Test-QuickJump
             Test-Templater
             Test-Unitea
+            Test-Packaging
             Test-FormatterAndAnalyzer
         }
     }

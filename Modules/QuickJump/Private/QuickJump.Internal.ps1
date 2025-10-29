@@ -28,14 +28,23 @@ function ConvertTo-QuickJumpRecord {
     }
 
     $lastUsedDate = $null
-    if ($Entry.lastUsed) {
-        [DateTime]::TryParseExact(
-            $Entry.lastUsed,
-            'yyyy-MM-dd HH:mm:ss',
-            $null,
-            [System.Globalization.DateTimeStyles]::AssumeLocal,
-            [ref]$lastUsedDate
-        ) | Out-Null
+    $lastUsedValue = $Entry.lastUsed
+    if ($lastUsedValue -is [System.Array]) {
+        $lastUsedValue = $lastUsedValue | Select-Object -First 1
+    }
+    $lastUsedText = if ($null -ne $lastUsedValue) { [string]$lastUsedValue } else { $null }
+
+    if (-not [string]::IsNullOrWhiteSpace($lastUsedText)) {
+        try {
+            $lastUsedDate = [DateTime]::ParseExact(
+                $lastUsedText,
+                'yyyy-MM-dd HH:mm:ss',
+                [System.Globalization.CultureInfo]::InvariantCulture,
+                [System.Globalization.DateTimeStyles]::AssumeLocal
+            )
+        } catch {
+            $lastUsedDate = $null
+        }
     }
 
     return [PSCustomObject]@{
@@ -43,7 +52,7 @@ function ConvertTo-QuickJumpRecord {
         Path = $Entry.path
         Category = $Entry.category
         LastUsed = $lastUsedDate
-        LastUsedString = $Entry.lastUsed
+        LastUsedString = $lastUsedText
         UseCount = $useCount
     }
 }

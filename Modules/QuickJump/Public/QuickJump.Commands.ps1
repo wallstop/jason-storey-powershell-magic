@@ -746,8 +746,10 @@ function Invoke-QuickJumpCategory {
         # First selection: Choose category with path counts
         $categoryItems = @()
         $categories | ForEach-Object {
-            $pathCount = ($config.paths | Where-Object { $_.category -eq $_ }).Count
-            $categoryItems += "$_ ($pathCount paths)"
+            $categoryName = $_
+            $matchingPaths = @($config.paths | Where-Object { $_.category -eq $categoryName })
+            $pathCount = $matchingPaths.Count
+            $categoryItems += "$categoryName ($pathCount paths)"
         }
 
         try {
@@ -776,7 +778,8 @@ function Invoke-QuickJumpCategory {
         Write-Host 'Select Category:' -ForegroundColor Cyan
         for ($index = 0; $index -lt $categories.Count; $index++) {
             $categoryName = $categories[$index]
-            $pathCount = ($config.paths | Where-Object { $_.category -eq $categoryName }).Count
+            $matchingPaths = @($config.paths | Where-Object { $_.category -eq $categoryName })
+            $pathCount = $matchingPaths.Count
             Write-Host ('[{0}] {1} ({2} paths)' -f ($index + 1), $categoryName, $pathCount) -ForegroundColor Gray
         }
 
@@ -846,9 +849,11 @@ function Get-QuickJumpCategories {
     }
 
     return $categories | ForEach-Object {
-        $pathCount = ($config.paths | Where-Object { $_.category -eq $_ }).Count
+        $categoryName = $_
+        $matchingPaths = @($config.paths | Where-Object { $_.category -eq $categoryName })
+        $pathCount = $matchingPaths.Count
         [PSCustomObject]@{
-            Category = $_
+            Category = $categoryName
             Count = $pathCount
         }
     }
