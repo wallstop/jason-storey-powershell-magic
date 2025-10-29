@@ -1169,9 +1169,10 @@ Get-QuickJumpConfigPath          # View config path
 - ✅ Use in scripts and automation
 - ✅ Share with your team
 
-**Start simple:** Save a few frequently-used paths. **Build gradually:** Add
-more as you work. **Enjoy the speed:** Navigate in seconds, not minutes.
+- **Start simple:** Save a few frequently-used paths.
+- **Build gradually:** Addmore as you work.
+- **Enjoy the speed:** Navigate in seconds, not minutes.
 
-**→ [Back to Main README](../README.md)** **→
-[Troubleshooting Guide](troubleshooting.md)** **→
-[Command Reference](command-reference.md)**
+- **→ [Back to Main README](../README.md)**
+- **→ [Troubleshooting Guide](troubleshooting.md)**
+- **→ [Command Reference](command-reference.md)**

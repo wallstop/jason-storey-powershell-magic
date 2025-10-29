@@ -762,5 +762,6 @@ Get-Content $PROFILE
 
 ---
 
-**→ [Back to Main README](../README.md)** **→ [FAQ](faq.md)** **→
-[Command Reference](command-reference.md)**
+- **→ [Back to Main README](../README.md)**
+- **→ [FAQ](faq.md)**
+- **→ [Command Reference](command-reference.md)**
