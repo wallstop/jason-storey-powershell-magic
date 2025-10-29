@@ -96,7 +96,7 @@ $Files = $Files |
     Where-Object { $_ -and (Test-Path -LiteralPath $_) } |
     Sort-Object -Unique
 
-$errors = New-Object System.Collections.Generic.List[pscustomobject]
+$linkErrors = New-Object System.Collections.Generic.List[pscustomobject]
 $linkPattern = '(?<image>!?)\[(?<alt>[^\]]*)\]\((?<target>[^)\s]+(?:\s+"[^"]*")?)\)'
 
 foreach ($file in $Files) {
@@ -104,8 +104,8 @@ foreach ($file in $Files) {
     $content = Get-Content -LiteralPath $resolvedFile -Raw
     $directory = Split-Path -Path $resolvedFile -Parent
 
-    $matches = [System.Text.RegularExpressions.Regex]::Matches($content, $linkPattern)
-    foreach ($match in $matches) {
+    $linkMatches = [System.Text.RegularExpressions.Regex]::Matches($content, $linkPattern)
+    foreach ($match in $linkMatches) {
         $target = $match.Groups['target'].Value.Trim()
         if (-not $target) {
             continue
@@ -120,7 +120,7 @@ foreach ($file in $Files) {
         }
 
         if (-not (Test-Path -LiteralPath $resolvedPath)) {
-            $errors.Add([pscustomobject]@{
+            $linkErrors.Add([pscustomobject]@{
                     File = $resolvedFile
                     Target = $target
                 })
@@ -128,10 +128,10 @@ foreach ($file in $Files) {
     }
 }
 
-if ($errors.Count -gt 0) {
+if ($linkErrors.Count -gt 0) {
     Write-Host 'Markdown local link validation failed. Missing targets:' -ForegroundColor Red
-    foreach ($error in $errors) {
-        Write-Host ('  {0}: {1}' -f $error.File, $error.Target) -ForegroundColor Red
+    foreach ($linkError in $linkErrors) {
+        Write-Host ('  {0}: {1}' -f $linkError.File, $linkError.Target) -ForegroundColor Red
     }
     exit 1
 }
