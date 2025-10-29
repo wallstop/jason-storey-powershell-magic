@@ -39,6 +39,17 @@ repos:
         args: ['--maxkb=1000']
 
   # Markdown formatting
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.0.3
+    hooks:
+      - id: prettier
+        name: Prettier Markdown Formatter
+        files: '\.(md|markdown)$'
+        args: ['--prose-wrap', 'always', '--print-width', '80']
+        additional_dependencies:
+          - prettier@3.0.3
+
+  # Markdown validation
   - repo: https://github.com/igorshubovych/markdownlint-cli
     rev: v0.41.0
     hooks:

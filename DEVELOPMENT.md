@@ -1,6 +1,7 @@
 # PowerShell Magic - Development Guide
 
-This guide covers the development tools and workflow for PowerShell Magic contributors.
+This guide covers the development tools and workflow for PowerShell Magic
+contributors.
 
 ## 🚀 Quick Start
 
@@ -82,8 +83,7 @@ cd powershell-magic
 
 - Modules are adopting a `Private/` + `Public/` split so helpers stay isolated
   from exported cmdlets. QuickJump, Templater, and Unitea already follow this
-  structure (`Modules/<Module>/Private/*.ps1`,
-  `Modules/<Module>/Public/*.ps1`).
+  structure (`Modules/<Module>/Private/*.ps1`, `Modules/<Module>/Public/*.ps1`).
 - Each module’s root `.psm1` dot-sources the scripts in those folders; follow
   the same pattern for new modules or when extracting additional helpers.
 - Keep `FunctionsToExport` in each module manifest accurate when adding new
@@ -101,14 +101,13 @@ cd powershell-magic
 - **Command Exports**: Expected commands are available
 - **Dependency Handling**: Graceful failure without external tools
 - **Configuration**: Config path functions work correctly
-- **Common Utilities**: Shared helpers for config paths,
-  non-interactive mode, and `fzf` probing
+- **Common Utilities**: Shared helpers for config paths, non-interactive mode,
+  and `fzf` probing
 - **Code Quality**: Formatter and analyzer functionality
 
 ### Test Design
 
-- **No External Dependencies**: Tests run without fzf, 7-Zip, eza, or Unity
-  Hub
+- **No External Dependencies**: Tests run without fzf, 7-Zip, eza, or Unity Hub
 - **Mocked Dependencies**: Where external tools are needed
 - **Syntax Validation**: PowerShell AST parsing for all scripts
 - **Module Structure**: Validates proper module organization
@@ -137,7 +136,7 @@ cd powershell-magic
 1. **PowerShell Formatting**: Uses PSScriptAnalyzer rules
 2. **Unit Tests**: Ensures all functionality works
 3. **File Checks**: Trailing whitespace, merge conflicts, large files
-4. **Markdown**: Linting and formatting
+4. **Markdown**: Prettier reflows documents; markdownlint verifies style
 
 ### Hook Behavior
 
@@ -169,22 +168,22 @@ jobs:
   test:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v4
-    - name: Run Tests
-      run: |
-        powershell -ExecutionPolicy Bypass -File "./Run-Tests.ps1" -CI
+      - uses: actions/checkout@v4
+      - name: Run Tests
+        run: |
+          powershell -ExecutionPolicy Bypass -File "./Run-Tests.ps1" -CI
 ```
 
 ### Azure DevOps Example
 
 ```yaml
 steps:
-- task: PowerShell@2
-  displayName: 'Run PowerShell Magic Tests'
-  inputs:
-    filePath: './Run-Tests.ps1'
-    arguments: '-CI'
-    errorActionPreference: 'stop'
+  - task: PowerShell@2
+    displayName: "Run PowerShell Magic Tests"
+    inputs:
+      filePath: "./Run-Tests.ps1"
+      arguments: "-CI"
+      errorActionPreference: "stop"
 ```
 
 ## 🔧 Tool Requirements
@@ -199,6 +198,7 @@ steps:
 
 - **Python 3.7+**: For pre-commit framework
 - **pre-commit**: `pip install pre-commit`
+- **Node.js 18+**: Required for markdownlint and Prettier hooks
 
 ### External Tools (Runtime)
 
@@ -252,11 +252,15 @@ ls .git\hooks\
 
 ## 📚 Additional Resources
 
-- **PSScriptAnalyzer Documentation**: <https://github.com/PowerShell/PSScriptAnalyzer>
+- **PSScriptAnalyzer Documentation**:
+  <https://github.com/PowerShell/PSScriptAnalyzer>
 - **Pre-commit Framework**: <https://pre-commit.com/>
-- **PowerShell Best Practices**: <https://docs.microsoft.com/en-us/powershell/scripting/developer/cmdlet/strongly-encouraged-development-guidelines>
-- **Git Hooks Documentation**: <https://git-scm.com/book/en/v2/Customizing-Git-Git-Hooks>
+- **PowerShell Best Practices**:
+  <https://docs.microsoft.com/en-us/powershell/scripting/developer/cmdlet/strongly-encouraged-development-guidelines>
+- **Git Hooks Documentation**:
+  <https://git-scm.com/book/en/v2/Customizing-Git-Git-Hooks>
 
 ---
 
-**Ready to contribute? Start with: `.\Setup-Hooks.ps1` and `.\Run-Tests.ps1`** 🚀
+**Ready to contribute? Start with: `.\Setup-Hooks.ps1` and `.\Run-Tests.ps1`**
+🚀

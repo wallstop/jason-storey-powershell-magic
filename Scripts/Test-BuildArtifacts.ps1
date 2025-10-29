@@ -66,6 +66,7 @@ foreach ($entry in $metadata) {
     Test-NotNullOrWhiteSpace -Value $entry.Version -PropertyName 'Version'
     Test-NotNullOrWhiteSpace -Value $entry.PackagePath -PropertyName 'PackagePath'
     Test-NotNullOrWhiteSpace -Value $entry.PackageHashSha256 -PropertyName 'PackageHashSha256'
+    Test-NotNullOrWhiteSpace -Value $entry.ManifestPath -PropertyName 'ManifestPath'
 
     $expectedPath = if (Test-Path -LiteralPath $entry.PackagePath) {
         (Resolve-Path -LiteralPath $entry.PackagePath).Path
@@ -83,12 +84,35 @@ foreach ($entry in $metadata) {
         throw "SHA256 mismatch for '$($entry.Name)': expected $expectedHash, got $actualHash."
     }
 
+    if (-not (Test-Path -LiteralPath $entry.ManifestPath)) {
+        throw "Manifest path '$($entry.ManifestPath)' for module '$($entry.Name)' was not found."
+    }
+
     if ($entry.FunctionsToExport -and ($entry.FunctionsToExport -isnot [System.Array])) {
         throw "FunctionsToExport for '$($entry.Name)' must be an array."
     }
 
     if ($entry.AliasesToExport -and ($entry.AliasesToExport -isnot [System.Array])) {
         throw "AliasesToExport for '$($entry.Name)' must be an array."
+    }
+
+    $functions = if ($entry.FunctionsToExport) { @($entry.FunctionsToExport) } else { @() }
+    if ($functions.Count -eq 0) {
+        throw "FunctionsToExport for '$($entry.Name)' is empty."
+    }
+
+    $aliases = if ($entry.AliasesToExport) { @($entry.AliasesToExport) } else { @() }
+    if ($aliases -isnot [System.Array]) {
+        throw "AliasesToExport for '$($entry.Name)' must be an array."
+    }
+
+    $tags = if ($entry.Tags) { @($entry.Tags) } else { @() }
+    if ($tags.Count -eq 0) {
+        throw "Tags collection for '$($entry.Name)' is empty."
+    }
+
+    if ([string]::IsNullOrWhiteSpace($entry.ReleaseNotes)) {
+        throw "ReleaseNotes for '$($entry.Name)' cannot be null or whitespace."
     }
 }
 
