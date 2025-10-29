@@ -22,6 +22,18 @@ repos:
         files: '\.(ps1|psm1|psd1)$'
         pass_filenames: false
         description: 'Run PowerShell unit tests'
+      - id: markdown-local-link-check
+        name: Markdown Local Link Check
+        entry: pwsh
+        args:
+          - '-NoLogo'
+          - '-NoProfile'
+          - '-ExecutionPolicy'
+          - 'Bypass'
+          - '-File'
+          - './Scripts/Test-MarkdownLinks.ps1'
+        language: system
+        files: '\.(md|markdown)$'
 
   # General file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -39,6 +51,17 @@ repos:
         args: ['--maxkb=1000']
 
   # Markdown formatting
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.0.3
+    hooks:
+      - id: prettier
+        name: Prettier Markdown Formatter
+        files: '\.(md|markdown)$'
+        args: ['--prose-wrap', 'always', '--print-width', '80']
+        additional_dependencies:
+          - prettier@3.0.3
+
+  # Markdown validation
   - repo: https://github.com/igorshubovych/markdownlint-cli
     rev: v0.41.0
     hooks:
@@ -46,8 +69,16 @@ repos:
         args: ['--fix', '--config', '.markdownlint.json']
         exclude: 'CHANGELOG.md'
 
+  # Markdown link checking
+  - repo: https://github.com/tcort/markdown-link-check
+    rev: v3.11.2
+    hooks:
+      - id: markdown-link-check
+        args: ['--quiet', '--config', '.markdown-link-check.json']
+        files: '\.(md|markdown)$'
+
 # Global configuration
-default_stages: [commit]
+default_stages: [pre-commit]
 fail_fast: false
 
 # Exclude patterns

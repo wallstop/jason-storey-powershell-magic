@@ -51,6 +51,7 @@ Complete troubleshooting guide for PowerShell Magic modules.
    ```
 
 3. **PowerShell hasn't been restarted**
+
    - Close and reopen PowerShell after running setup
 
 4. **Profile doesn't auto-load**
@@ -495,6 +496,7 @@ Copy-Item $PROFILE "$PROFILE.backup.$(Get-Date -Format 'yyyyMMddHHmmss')"
 **Solutions:**
 
 1. **No package manager**
+
    - Install Scoop: <https://scoop.sh/>
    - Or install tools manually:
      - fzf: <https://github.com/junegunn/fzf>
@@ -502,6 +504,7 @@ Copy-Item $PROFILE "$PROFILE.backup.$(Get-Date -Format 'yyyyMMddHHmmss')"
      - eza: <https://github.com/eza-community/eza>
 
 2. **Network issues**
+
    - Check internet connection
    - Retry installation
    - Use different package manager
@@ -724,37 +727,41 @@ Get-Content $PROFILE
 ### Getting Help
 
 1. **Check documentation:**
+
    - [Main README](../README.md)
    - [QuickJump Guide](quickjump-guide.md)
    - [Templater Guide](templater-guide.md)
    - [FAQ](faq.md)
 
 2. **Report an issue:**
-   - GitHub Issues: <https://github.com/your-username/powershell-magic/issues>
+
+   - GitHub Issues:
+     <https://github.com/wallstop/jason-storey-powershell-magic/issues>
    - Include diagnostic information above
    - Describe steps to reproduce
    - Include error messages
 
 3. **Community support:**
-   - GitHub Discussions: <https://github.com/your-username/powershell-magic/discussions>
+   - GitHub Discussions:
+     <https://github.com/wallstop/jason-storey-powershell-magic/issues>
 
 ---
 
 ## Quick Fixes Summary
 
-| Problem | Quick Fix |
-|---------|-----------|
-| Commands not found | `Import-Module QuickJump -Force; Restart PowerShell` |
-| fzf not working | `scoop install fzf; Restart PowerShell` |
-| 7-Zip not found | Install 7-Zip/7zz (per OS); Restart PowerShell |
-| Config corrupted | `Copy backup file; Restart PowerShell` |
-| Execution policy | `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser` |
-| Module import fails | `.\Setup-PowerShellMagic.ps1 -Force` |
-| Tab completion broken | `Import-Module QuickJump -Force` |
-| Profile not loading | `. $PROFILE` or restart PowerShell |
+| Problem               | Quick Fix                                             |
+| --------------------- | ----------------------------------------------------- |
+| Commands not found    | `Import-Module QuickJump -Force; Restart PowerShell`  |
+| fzf not working       | `scoop install fzf; Restart PowerShell`               |
+| 7-Zip not found       | Install 7-Zip/7zz (per OS); Restart PowerShell        |
+| Config corrupted      | `Copy backup file; Restart PowerShell`                |
+| Execution policy      | `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser` |
+| Module import fails   | `.\Setup-PowerShellMagic.ps1 -Force`                  |
+| Tab completion broken | `Import-Module QuickJump -Force`                      |
+| Profile not loading   | `. $PROFILE` or restart PowerShell                    |
 
 ---
 
-**→ [Back to Main README](../README.md)**
-**→ [FAQ](faq.md)**
-**→ [Command Reference](command-reference.md)**
+- **→ [Back to Main README](../README.md)**
+- **→ [FAQ](faq.md)**
+- **→ [Command Reference](command-reference.md)**

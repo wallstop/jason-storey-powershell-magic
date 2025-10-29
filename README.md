@@ -1,13 +1,11 @@
 # PowerShell Magic 🪄
 
 > **Supercharge your PowerShell workflow** with lightning-fast directory
-> navigation, instant project templates, and Unity project management.
-> **Works everywhere PowerShell does** - Windows, macOS, and Linux! 🌍
+> navigation, instant project templates, and Unity project management. **Works
+> everywhere PowerShell does** - Windows, macOS, and Linux! 🌍
 
-[![PowerShell][badge-pwsh]][link-pwsh]
-[![License: MIT][badge-license]](LICENSE)
-![Platform: Windows][badge-windows]
-![Platform: macOS][badge-macos]
+[![PowerShell][badge-pwsh]][link-pwsh] [![License: MIT][badge-license]](LICENSE)
+![Platform: Windows][badge-windows] ![Platform: macOS][badge-macos]
 ![Platform: Linux][badge-linux]
 
 ---
@@ -47,10 +45,10 @@ solve common developer workflow problems:
 **In simple terms:** It makes navigating your computer, starting new projects,
 and managing Unity games much faster and easier through your command line.
 
-> 🌍 **Works Everywhere!**
-> PowerShell Magic is fully cross-platform! Whether you're on Windows, macOS,
-> or Linux, you get the same powerful workflow tools. Just install
-> [PowerShell 7+](https://github.com/PowerShell/PowerShell) and you're ready to go!
+> 🌍 **Works Everywhere!** PowerShell Magic is fully cross-platform! Whether
+> you're on Windows, macOS, or Linux, you get the same powerful workflow tools.
+> Just install [PowerShell 7+](https://github.com/PowerShell/PowerShell) and
+> you're ready to go!
 
 ---
 
@@ -58,19 +56,18 @@ and managing Unity games much faster and easier through your command line.
 
 ### Problems It Solves
 
-| **Problem** | **Without PowerShell Magic** | **With PowerShell Magic** |
-|-------------|------------------------------|---------------------------|
-| **Too much typing to navigate** | `cd C:\Users\Me\Documents\Projects\MyGame\Assets\Scripts\Player` | `qj player` ⚡ |
-| **Repeating project setup** | Manually copy folders, rename files, update configs every time | `use-tpl my-project` 🚀 |
-| **Finding Unity projects** | Click through folders, remember which Unity version, launch manually | `unity mygame` 🎮 |
-| **Lost in deep directories** | Keep track of multiple terminal windows, re-type paths constantly | Save once, jump instantly 📍 |
+| **Problem**                     | **Without PowerShell Magic**                                         | **With PowerShell Magic**    |
+| ------------------------------- | -------------------------------------------------------------------- | ---------------------------- |
+| **Too much typing to navigate** | `cd C:\Users\Me\Documents\Projects\MyGame\Assets\Scripts\Player`     | `qj player` ⚡               |
+| **Repeating project setup**     | Manually copy folders, rename files, update configs every time       | `use-tpl my-project` 🚀      |
+| **Finding Unity projects**      | Click through folders, remember which Unity version, launch manually | `unity mygame` 🎮            |
+| **Lost in deep directories**    | Keep track of multiple terminal windows, re-type paths constantly    | Save once, jump instantly 📍 |
 
 ### Key Benefits
 
 - ✅ **Save Time** — Navigate anywhere in one or two keystrokes instead of
   dozens.
-- ✅ **Consistency** — Use the same project structure every time with
-  templates.
+- ✅ **Consistency** — Use the same project structure every time with templates.
 - ✅ **No More Searching** — Keep important paths saved with memorable names.
 - ✅ **Fuzzy Finding** — Type partial names and instantly find what you need.
 - ✅ **Track Usage** — See which folders you use most and jump to recent
@@ -84,7 +81,7 @@ and managing Unity games much faster and easier through your command line.
 
 ```powershell
 # 1. Clone or download this repository
-git clone https://github.com/your-username/powershell-magic.git
+git clone https://github.com/wallstop/jason-storey-powershell-magic.git
 cd powershell-magic
 
 # 2. Run the setup script (prompts before changes on all platforms)
@@ -110,6 +107,18 @@ pwsh ./Setup-PowerShellMagic.ps1
 
 **→ [Full Installation Guide](docs/installation.md)**
 
+### What You Need
+
+- **PowerShell 7.0+** — install from
+  [GitHub releases](https://github.com/PowerShell/PowerShell) or your package
+  manager.
+- **fzf (optional)** — enables lightning-fast fuzzy pickers across all modules.
+- **7-Zip / 7zz (optional)** — required only when working with archive-based
+  templates.
+- **eza (optional)** — modern directory listings surfaced by the setup helper.
+- **Unity Hub (optional)** — needed to launch projects through the Unitea
+  module.
+
 ### Your First Commands
 
 Once installed, try these commands:
@@ -134,13 +143,13 @@ qj
 
 ## 📦 Modules Overview
 
-PowerShell Magic includes three independent modules. Use one, two, or all
-three based on your needs.
+PowerShell Magic includes three independent modules. Use one, two, or all three
+based on your needs.
 
 ### 🔍 QuickJump - Directory Navigation
 
-**Problem:** Typing long file paths is slow and error-prone.
-**Solution:** Save directories with memorable aliases, jump to them instantly.
+**Problem:** Typing long file paths is slow and error-prone. **Solution:** Save
+directories with memorable aliases, jump to them instantly.
 
 #### QuickJump Tasks You Can Do
 
@@ -178,9 +187,8 @@ qjc                               # Choose category, then choose path
 ### 📁 Templater - Project Templates
 
 **Problem:** Setting up new projects from scratch is repetitive and
-time-consuming.
-**Solution:** Save project structures as templates, deploy them with one
-command.
+time-consuming. **Solution:** Save project structures as templates, deploy them
+with one command.
 
 #### Templater Tasks You Can Do
 
@@ -194,6 +202,9 @@ templates
 # Use a template
 use-tpl react-starter                    # Deploy in current directory
 use-tpl react-starter -CreateSubfolder   # Create subfolder automatically
+use-tpl react-starter `
+    -Variables @{ ProjectName = 'Alpha'; Description = 'Internal tool' } `
+    -SubfolderName '{{ProjectName}}-app' # Token replacement for names + files
 
 # Manage templates
 templates -Category web              # Filter by category
@@ -206,9 +217,19 @@ Export-Templates -Path backup.json   # Backup your templates
 - 📦 **Multiple formats** (ZIP, 7Z, RAR, TAR archives, or plain folders)
 - 🏷️ **Organize** with categories and tags
 - 👀 **Preview** template contents before deploying
+- 🧩 **Token substitution** with `Use-Template -Variables` applied to
+  `{{VariableName}}` placeholders
 - 📊 **Statistics** track which templates you use most
 - 💾 **Import/Export** share templates with your team
 - 🔍 **Fuzzy finding** quickly find the right template
+
+##### Token Replacement with `{{VariableName}}`
+
+- Add tokens to file/folder names and file contents
+  (`src/{{ProjectName}}/README.md`).
+- Deploy with values:
+  `Use-Template -Alias api -Variables @{ ProjectName = 'Orders' }`.
+- Extend or limit processed extensions with `-VariableExtensions`.
 
 **→ [Complete Templater Guide](docs/templater-guide.md)**
 
@@ -216,8 +237,7 @@ Export-Templates -Path backup.json   # Backup your templates
 
 ### 🎮 Unitea - Unity Management
 
-**Problem:** Managing multiple Unity projects and editor versions is
-cumbersome.
+**Problem:** Managing multiple Unity projects and editor versions is cumbersome.
 **Solution:** Save Unity projects with aliases, open them with one command.
 
 #### Unitea Tasks You Can Do
@@ -241,8 +261,9 @@ unity-remove mygame                  # Remove from list
 ```
 
 During setup the bootstrap script offers to enable Unitea's automatic metadata
-sync at shell startup. Opt in to have it set `$env:POWERSHELL_MAGIC_UNITEA_AUTOUPDATE_STARTUP=1`
-in your profile so saved Unity versions stay aligned with `ProjectVersion.txt`.
+sync at shell startup. Opt in to have it set
+`$env:POWERSHELL_MAGIC_UNITEA_AUTOUPDATE_STARTUP=1` in your profile so saved
+Unity versions stay aligned with `ProjectVersion.txt`.
 
 #### Unitea Key Features
 
@@ -295,11 +316,12 @@ in your profile so saved Unity versions stay aligned with `ProjectVersion.txt`.
 
 #### Method 1: Automatic Setup (Recommended) 🎯
 
-The setup script works identically on all platforms and makes installation a breeze!
+The setup script works identically on all platforms and makes installation a
+breeze!
 
 ```powershell
 # Clone the repository
-git clone https://github.com/your-username/powershell-magic.git
+git clone https://github.com/wallstop/jason-storey-powershell-magic.git
 cd powershell-magic
 
 # Run the setup script
@@ -357,61 +379,62 @@ If you see the commands listed, you're all set!
 
 ### Comprehensive Guides
 
-| Guide | Description |
-|-------|-------------|
-| **[Installation Guide](docs/installation.md)** | Detailed setup instructions, manual installation, verification |
-| **[QuickJump Guide](docs/quickjump-guide.md)** | Complete directory navigation tutorial with examples |
-| **[Templater Guide](docs/templater-guide.md)** | Template management, creating templates, workflows |
-| **[Unitea Guide](docs/unitea-guide.md)** | Unity project management, editor detection |
-| **[Troubleshooting](docs/troubleshooting.md)** | Common issues, solutions, debugging |
-| **[FAQ](docs/faq.md)** | Frequently asked questions |
-| **[Command Reference](docs/command-reference.md)** | Complete command and parameter reference |
-| **[Configuration](docs/configuration.md)** | Advanced customization, config files |
+| Guide                                              | Description                                                    |
+| -------------------------------------------------- | -------------------------------------------------------------- |
+| **[Installation Guide](docs/installation.md)**     | Detailed setup instructions, manual installation, verification |
+| **[QuickJump Guide](docs/quickjump-guide.md)**     | Complete directory navigation tutorial with examples           |
+| **[Templater Guide](docs/templater-guide.md)**     | Template management, creating templates, workflows             |
+| **[Unitea Guide](docs/unitea-guide.md)**           | Unity project management, editor detection                     |
+| **[Troubleshooting](docs/troubleshooting.md)**     | Common issues, solutions, debugging                            |
+| **[FAQ](docs/faq.md)**                             | Frequently asked questions                                     |
+| **[Command Reference](docs/command-reference.md)** | Complete command and parameter reference                       |
+| **[Configuration](docs/configuration.md)**         | Advanced customization, config files                           |
+| **[Publishing Guide](docs/publishing.md)**         | Packaging strategy, gallery releases, automation plan          |
 
 ### Quick Command Reference
 
 <details>
 <summary><b>QuickJump Commands</b></summary>
 
-| Command | Alias | Description |
-|---------|-------|-------------|
-| `Invoke-QuickJump [alias]` | `qj` | Navigate to saved path or show interactive menu |
-| `Add-QuickJumpPath -Alias <name>` | `qja` | Save current directory with an alias |
-| `Get-QuickJumpPaths` | `qjl` | List all saved paths |
-| `Remove-QuickJumpPath` | `qjr` | Remove a saved path |
-| `Invoke-QuickJumpCategory` | `qjc` | Navigate by category |
-| `Open-QuickJumpRecent` | `qjrecent` | Jump to most recent path |
+| Command                           | Alias      | Description                                     |
+| --------------------------------- | ---------- | ----------------------------------------------- |
+| `Invoke-QuickJump [alias]`        | `qj`       | Navigate to saved path or show interactive menu |
+| `Add-QuickJumpPath -Alias <name>` | `qja`      | Save current directory with an alias            |
+| `Get-QuickJumpPaths`              | `qjl`      | List all saved paths                            |
+| `Remove-QuickJumpPath`            | `qjr`      | Remove a saved path                             |
+| `Invoke-QuickJumpCategory`        | `qjc`      | Navigate by category                            |
+| `Open-QuickJumpRecent`            | `qjrecent` | Jump to most recent path                        |
 
 </details>
 
 <details>
 <summary><b>Templater Commands</b></summary>
 
-| Command | Alias | Description |
-|---------|-------|-------------|
-| `Get-Templates` | `templates`, `tpl` | Browse and use templates |
-| `Add-Template -Alias <name>` | `add-tpl` | Register a new template |
-| `Use-Template -Alias <name>` | `use-tpl` | Deploy a template |
-| `Remove-Template -Alias <name>` | `remove-tpl` | Remove a template |
-| `Update-Template` | - | Update template properties |
-| `Get-TemplateStats` | - | View usage statistics |
-| `Export-Templates` | - | Export templates to JSON |
-| `Import-Templates` | - | Import templates from JSON |
+| Command                         | Alias              | Description                |
+| ------------------------------- | ------------------ | -------------------------- |
+| `Get-Templates`                 | `templates`, `tpl` | Browse and use templates   |
+| `Add-Template -Alias <name>`    | `add-tpl`          | Register a new template    |
+| `Use-Template -Alias <name>`    | `use-tpl`          | Deploy a template          |
+| `Remove-Template -Alias <name>` | `remove-tpl`       | Remove a template          |
+| `Update-Template`               | -                  | Update template properties |
+| `Get-TemplateStats`             | -                  | View usage statistics      |
+| `Export-Templates`              | -                  | Export templates to JSON   |
+| `Import-Templates`              | -                  | Import templates from JSON |
 
 </details>
 
 <details>
 <summary><b>Unitea Commands</b></summary>
 
-| Command | Alias | Description |
-|---------|-------|-------------|
-| `Open-UnityProject [alias]` | `unity` | Open Unity project or show interactive menu |
-| `Add-UnityProject -Alias <name>` | `unity-add` | Add current Unity project |
+| Command                             | Alias          | Description                                  |
+| ----------------------------------- | -------------- | -------------------------------------------- |
+| `Open-UnityProject [alias]`         | `unity`        | Open Unity project or show interactive menu  |
+| `Add-UnityProject -Alias <name>`    | `unity-add`    | Add current Unity project                    |
 | `Update-UnityProject -Alias <name>` | `unity-update` | Update project metadata after version change |
-| `Get-UnityProjectSyncStatus` | `unity-check` | Check for projects with outdated metadata |
-| `Get-UnityProjects` | `unity-list` | List all saved Unity projects |
-| `Remove-UnityProject` | `unity-remove` | Remove a Unity project |
-| `Open-RecentUnityProject` | `unity-recent` | Open most recently used project |
+| `Get-UnityProjectSyncStatus`        | `unity-check`  | Check for projects with outdated metadata    |
+| `Get-UnityProjects`                 | `unity-list`   | List all saved Unity projects                |
+| `Remove-UnityProject`               | `unity-remove` | Remove a Unity project                       |
+| `Open-RecentUnityProject`           | `unity-recent` | Open most recently used project              |
 
 </details>
 
@@ -561,8 +584,7 @@ This helps you organize and filter your paths when you have many saved.
 **Fuzzy finding** means you don't need to type the exact name. You can type
 parts of it, and it finds matches.
 
-**Example:**
-If you have paths named:
+**Example:** If you have paths named:
 
 - `frontend-react-project`
 - `frontend-vue-project`
@@ -579,8 +601,7 @@ backend. Fast and flexible!
 A **template** is a pre-made folder structure or project that you can copy and
 reuse.
 
-**Example:**
-Instead of creating these files every time:
+**Example:** Instead of creating these files every time:
 
 ```text
 my-project/
@@ -611,8 +632,8 @@ It's faster and more powerful once you learn the basics!
   search for "pwsh" in the Start Menu.
 - **macOS:** Open Terminal and type `pwsh` (after installing PowerShell via
   `brew install powershell`)
-- **Linux:** Open your terminal and type `pwsh` (after installing PowerShell
-  via your package manager)
+- **Linux:** Open your terminal and type `pwsh` (after installing PowerShell via
+  your package manager)
 
 **Why PowerShell?** Unlike traditional shells, PowerShell works identically
 across all operating systems, so your scripts and workflows are truly portable!
@@ -682,8 +703,9 @@ winget install junegunn.fzf
 # Then restart PowerShell
 ```
 
-**Note:** Without fzf, you can still use aliases directly (for example,
-`qj myproject`). You won't have the interactive fuzzy finder.
+**Note:** Without fzf, commands fall back to simple numbered menus (you can
+still run aliases like `qj myproject`), but you lose fuzzy search speed and
+previews.
 
 </details>
 
@@ -778,6 +800,19 @@ code (Get-QuickJumpConfigPath)
 
 </details>
 
+### Setup Logging & Diagnostics
+
+- Run `.\Setup-PowerShellMagic.ps1 -EnableLogs` when you need a persistent trace
+  of setup actions.
+- Logs are written to
+  `%LOCALAPPDATA%\PowerShellMagic\logs\setup-<timestamp>.log` (or the
+  platform-equivalent install directory) by default.
+- Provide `-LogPath` to choose a different destination. Point it at a directory
+  for timestamped files, or specify an explicit `.log` path to capture the
+  current run at a fixed location.
+- The last five setup logs are retained automatically; older files are pruned
+  after each run so the log folder stays manageable.
+
 **→ [Complete Troubleshooting Guide](docs/troubleshooting.md)**
 
 ---
@@ -869,8 +904,8 @@ improving documentation.
 .\Setup-Hooks.ps1
 ```
 
-**→ [Contributing Guidelines](CONTRIBUTING.md)**
-**→ [Code of Conduct](CODE_OF_CONDUCT.md)**
+**→ [Contributing Guidelines](CONTRIBUTING.md)** **→
+[Code of Conduct](CODE_OF_CONDUCT.md)**
 
 ---
 
@@ -895,17 +930,21 @@ improving documentation.
 These tools enhance PowerShell Magic but aren't required:
 
 - **fzf** - Enables the awesome interactive fuzzy finder 🔍
+
   - Windows: `winget install fzf`, `scoop install fzf`, or `choco install fzf`
   - macOS: `brew install fzf`
-  - Linux: `sudo apt install fzf` / `sudo dnf install fzf` / `sudo pacman -S fzf`
+  - Linux: `sudo apt install fzf` / `sudo dnf install fzf` /
+    `sudo pacman -S fzf`
 
 - **7-Zip / 7zz** - Cross-platform archive support for Templater 📦
+
   - Windows: `winget install 7zip` or `scoop install 7zip`
-  - macOS: `brew install p7zip` *(installs 7zz command)*
+  - macOS: `brew install p7zip` _(installs 7zz command)_
   - Linux: `sudo apt install p7zip-full` / `sudo dnf install p7zip` /
     `sudo pacman -S p7zip`
 
 - **eza** - Pretty directory listings ✨
+
   - Windows: `scoop install eza` or `cargo install eza`
   - macOS: `brew install eza`
   - Linux: `cargo install eza` or check your package manager
@@ -913,7 +952,8 @@ These tools enhance PowerShell Magic but aren't required:
 - **Unity Hub** - Only needed for the Unitea module 🎮
   - Download from [unity.com](https://unity.com/download) for all platforms
 
-**💡 Pro tip:** Run the setup script and it will help you install these automatically!
+**💡 Pro tip:** Run the setup script and it will help you install these
+automatically!
 
 ---
 
@@ -923,8 +963,7 @@ New to PowerShell? Here are resources to get started:
 
 - **[PowerShell Basics](docs/powershell-basics.md)** - Quick introduction for
   beginners
-- **[Microsoft PowerShell Docs][link-ms-docs]** - Official
-  documentation
+- **[Microsoft PowerShell Docs][link-ms-docs]** - Official documentation
 - **[PowerShell Gallery](https://www.powershellgallery.com/)** - Discover more
   modules
 - **[fzf Documentation](https://github.com/junegunn/fzf)** - Learn about fuzzy
@@ -959,7 +998,7 @@ Just keep the license notice.
 ## 💬 Support & Feedback
 
 - **Issues:** [GitHub Issues][link-issues]
-- **Discussions:** [GitHub Discussions][link-discussions]
+- **Support:** [GitHub Issues][link-support]
 - **Documentation:** [docs/](docs/)
 
 ---
@@ -968,10 +1007,9 @@ Just keep the license notice.
 
 If PowerShell Magic saves you time and frustration:
 
-⭐ **Star this repository** to show your support
-🐛 **Report issues** to help improve it
-📢 **Share it** with others who might find it useful
-🤝 **Contribute** to make it even better
+⭐ **Star this repository** to show your support 🐛 **Report issues** to help
+improve it 📢 **Share it** with others who might find it useful 🤝
+**Contribute** to make it even better
 
 ---
 
@@ -989,15 +1027,18 @@ If PowerShell Magic saves you time and frustration:
 
 ---
 
-**Happy coding on any platform!** 🚀
-*PowerShell Magic - Navigate fast, code faster, anywhere.*
+**Happy coding on any platform!** 🚀 _PowerShell Magic - Navigate fast, code
+faster, anywhere._
 
 [badge-pwsh]: https://img.shields.io/badge/PowerShell-7.0%2B-blue.svg
 [badge-license]: https://img.shields.io/badge/License-MIT-yellow.svg
-[badge-windows]: https://img.shields.io/badge/Platform-Windows-0078D4?logo=windows&logoColor=white
-[badge-macos]: https://img.shields.io/badge/Platform-macOS-000000?logo=apple&logoColor=white
-[badge-linux]: https://img.shields.io/badge/Platform-Linux-FCC624?logo=linux&logoColor=black
+[badge-windows]:
+  https://img.shields.io/badge/Platform-Windows-0078D4?logo=windows&logoColor=white
+[badge-macos]:
+  https://img.shields.io/badge/Platform-macOS-000000?logo=apple&logoColor=white
+[badge-linux]:
+  https://img.shields.io/badge/Platform-Linux-FCC624?logo=linux&logoColor=black
 [link-pwsh]: https://github.com/PowerShell/PowerShell
-[link-issues]: https://github.com/your-username/powershell-magic/issues
-[link-discussions]: https://github.com/your-username/powershell-magic/discussions
+[link-issues]: https://github.com/wallstop/jason-storey-powershell-magic/issues
+[link-support]: https://github.com/wallstop/jason-storey-powershell-magic/issues
 [link-ms-docs]: https://docs.microsoft.com/en-us/powershell/

@@ -1,0 +1,55 @@
+name: Package Modules
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+  release:
+    types: [published]
+
+env:
+  BUILD_OUTPUT_DIR: out
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install PowerShellGet
+        run: |
+          Install-Module PowerShellGet -Scope CurrentUser -Force -AllowClobber
+          Import-Module PowerShellGet -Force
+        shell: pwsh
+
+      - name: Run Tests
+        run: pwsh -NoProfile -File .\Run-Tests.ps1 -CI
+
+      - name: Build modules
+        run: pwsh -NoProfile -File .\Scripts\Build-Modules.ps1 -OutputPath $env:BUILD_OUTPUT_DIR
+
+      - name: Validate build artifacts
+        run: pwsh -NoProfile -File .\Scripts\Test-BuildArtifacts.ps1 -MetadataPath "$env:BUILD_OUTPUT_DIR/packages/module-metadata.json" -PackageRoot "$env:BUILD_OUTPUT_DIR/packages"
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v3
+        with:
+          name: module-packages
+          path: |
+            ${{ env.BUILD_OUTPUT_DIR }}/packages/*.nupkg
+            ${{ env.BUILD_OUTPUT_DIR }}/packages/module-metadata.json
+
+      - name: Publish to PowerShell Gallery
+        if: github.event_name == 'release' && github.event.action == 'published' && secrets.PSGALLERY_API_KEY != ''
+        run: |
+          Get-ChildItem -Path $env:BUILD_OUTPUT_DIR/packages/*.nupkg | ForEach-Object {
+            Publish-Module -Path $_.FullName -Repository PSGallery -NuGetApiKey $env:PSGALLERY_API_KEY
+          }
+        shell: pwsh
+        env:
+          PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}

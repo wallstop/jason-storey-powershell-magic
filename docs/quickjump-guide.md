@@ -1,9 +1,9 @@
 # QuickJump Complete Guide
 
-**QuickJump** is your shortcut to lightning-fast directory navigation.
-Save paths with memorable aliases, organize them with categories, and jump
-to them instantly from anywhere in your terminal. It runs on Windows, macOS,
-and Linux—anywhere PowerShell 7 is available.
+**QuickJump** is your shortcut to lightning-fast directory navigation. Save
+paths with memorable aliases, organize them with categories, and jump to them
+instantly from anywhere in your terminal. It runs on Windows, macOS, and
+Linux—anywhere PowerShell 7 is available.
 
 ---
 
@@ -266,12 +266,12 @@ qja webapp -Category work -Force
 
 **Parameter Details:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `-Alias` | String | Short name for the path (optional if using positional) |
-| `-Path` | String | Directory to save (defaults to current directory) |
-| `-Category` | String | Organizational category |
-| `-Force` | Switch | Overwrite existing alias or path |
+| Parameter   | Type   | Description                                            |
+| ----------- | ------ | ------------------------------------------------------ |
+| `-Alias`    | String | Short name for the path (optional if using positional) |
+| `-Path`     | String | Directory to save (defaults to current directory)      |
+| `-Category` | String | Organizational category                                |
+| `-Force`    | Switch | Overwrite existing alias or path                       |
 
 **Common Patterns:**
 
@@ -1169,10 +1169,10 @@ Get-QuickJumpConfigPath          # View config path
 - ✅ Use in scripts and automation
 - ✅ Share with your team
 
-**Start simple:** Save a few frequently-used paths.
-**Build gradually:** Add more as you work.
-**Enjoy the speed:** Navigate in seconds, not minutes.
+- **Start simple:** Save a few frequently-used paths.
+- **Build gradually:** Addmore as you work.
+- **Enjoy the speed:** Navigate in seconds, not minutes.
 
-**→ [Back to Main README](../README.md)**
-**→ [Troubleshooting Guide](troubleshooting.md)**
-**→ [Command Reference](command-reference.md)**
+- **→ [Back to Main README](../README.md)**
+- **→ [Troubleshooting Guide](troubleshooting.md)**
+- **→ [Command Reference](command-reference.md)**

@@ -1,0 +1,131 @@
+name: Build Modules
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to package (set to auto to use latest release/tag)'
+        required: false
+        default: 'auto'
+      release:
+        description: 'Treat build as release (auto to infer from tag)'
+        required: false
+        default: 'auto'
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      PSCACHE_PATH: ${{ runner.temp }}\ps-cache
+      PSGALLERY_APIKEY: ${{ secrets.PSGALLERY_APIKEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine version
+        id: version
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const inputs = (context.payload && context.payload.inputs) ? context.payload.inputs : {};
+            let versionInput = (inputs.version || '').trim();
+            let releaseInput = (inputs.release || '').trim().toLowerCase();
+
+            const isTagBuild = context.eventName === 'push' && context.ref && context.ref.startsWith('refs/tags/');
+            let version = versionInput && versionInput.toLowerCase() !== 'auto' ? versionInput : '';
+            let release = releaseInput === 'true';
+
+            if (isTagBuild) {
+              const tag = context.ref.replace('refs/tags/', '');
+              if (!version || version.toLowerCase() === 'auto') {
+                version = tag.replace(/^v/, '');
+              }
+              release = true;
+            }
+
+            if ((!version || version.toLowerCase() === 'auto') && !isTagBuild) {
+              try {
+                const { data } = await github.rest.repos.getLatestRelease({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo
+                });
+                if (data && data.tag_name) {
+                  version = data.tag_name.replace(/^v/, '');
+                }
+              } catch (error) {
+                core.info(`No published release detected: ${error.message}`);
+              }
+            }
+
+            if (!version || version.toLowerCase() === 'auto') {
+              const versionFile = path.join(process.cwd(), 'build', 'version.json');
+              if (fs.existsSync(versionFile)) {
+                try {
+                  const fileData = JSON.parse(fs.readFileSync(versionFile, 'utf8'));
+                  if (fileData && fileData.Version) {
+                    version = String(fileData.Version);
+                  }
+                } catch (error) {
+                  core.warning(`Failed to read build/version.json: ${error.message}`);
+                }
+              }
+            }
+
+            if (!version || version.toLowerCase() === 'auto') {
+              version = '0.0.1';
+            }
+
+            if (!release && releaseInput === 'auto') {
+              release = isTagBuild;
+            }
+
+            core.setOutput('version', version);
+            core.setOutput('release', release ? 'true' : 'false');
+
+      - name: Setup PowerShellGet Repository
+        shell: pwsh
+        run: |
+          $packagesRoot = Join-Path (Get-Location) 'out/packages'
+          if (-not (Test-Path $packagesRoot)) {
+              New-Item -ItemType Directory -Path $packagesRoot -Force | Out-Null
+          }
+          Register-PSRepository -Name LocalPackages `
+            -SourceLocation $packagesRoot `
+            -PublishLocation $packagesRoot `
+            -InstallationPolicy Trusted
+
+      - name: Build Modules
+        shell: pwsh
+        env:
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+          BUILD_RELEASE: ${{ steps.version.outputs.release }}
+        run: |
+          $releaseSwitch = if ($env:BUILD_RELEASE -eq 'true') { '-Release' } else { '' }
+          pwsh -NoLogo -NoProfile -File .\Scripts\Build-Modules.ps1 -Version $env:BUILD_VERSION @($releaseSwitch.Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries))
+
+      - name: Validate Artifacts
+        shell: pwsh
+        run: |
+          pwsh -NoLogo -NoProfile -File .\Scripts\Test-BuildArtifacts.ps1 `
+            -MetadataPath .\out\packages\module-metadata.json `
+            -PackageRoot .\out\packages
+
+      - name: Upload Packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: module-packages
+          path: out/packages/*.nupkg
+          if-no-files-found: error

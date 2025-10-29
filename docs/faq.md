@@ -39,8 +39,8 @@ Yes! PowerShell Magic now supports Windows, macOS, and Linux as long as you're
 running PowerShell 7 or newer. The setup script automatically detects your
 platform and uses the right install location and package managers:
 
-- **Windows:** Stores files in `%LOCALAPPDATA%\PowerShellMagic` and offers to use
-  winget, Scoop, or Chocolatey.
+- **Windows:** Stores files in `%LOCALAPPDATA%\PowerShellMagic` and offers to
+  use winget, Scoop, or Chocolatey.
 - **macOS:** Uses the XDG-compliant path `~/.local/share/powershell-magic` and
   leverages Homebrew if available.
 - **Linux:** Installs under `~/.local/share/powershell-magic` and supports apt,
@@ -56,8 +56,8 @@ Install PowerShell 7 first if you don't already have it:
 - Windows 10/11
 - Windows Server 2016+
 - macOS 12+ (Intel or Apple Silicon)
-- Linux distributions with PowerShell 7 support (e.g., Ubuntu 20.04+, Fedora 38+,
-  Arch/Manjaro)
+- Linux distributions with PowerShell 7 support (e.g., Ubuntu 20.04+, Fedora
+  38+, Arch/Manjaro)
 
 PowerShell 7.0 or higher is required on every platform.
 
@@ -296,8 +296,8 @@ Recommended! Unitea uses Unity Hub to:
 
 ### What is auto-sync and how does it work?
 
-**Auto-sync** keeps your saved Unity project metadata up-to-date
-when you upgrade or change Unity versions.
+**Auto-sync** keeps your saved Unity project metadata up-to-date when you
+upgrade or change Unity versions.
 
 **How it works:**
 
@@ -438,7 +438,7 @@ Restart PowerShell after installing.
 
 - **Windows:** `scoop install 7zip`, `choco install 7zip`, or
   `winget install 7zip.7zip`
-- **macOS:** `brew install p7zip` *(installs the `7zz` CLI)*
+- **macOS:** `brew install p7zip` _(installs the `7zz` CLI)_
 - **Linux:** `sudo apt install p7zip-full`, `sudo dnf install p7zip`, or
   `sudo pacman -S p7zip`
 - **Manual:** download binaries from <https://www.7-zip.org/> (ships `7z.exe`
@@ -667,7 +667,8 @@ See [Contributing Guidelines](../CONTRIBUTING.md)
 
 ### Where do I report bugs?
 
-GitHub Issues: <https://github.com/your-username/powershell-magic/issues>
+GitHub Issues:
+<https://github.com/wallstop/jason-storey-powershell-magic/issues>
 
 Include:
 
@@ -682,7 +683,8 @@ Yes! GitHub Discussions or Issues.
 
 ### Is there a community?
 
-- GitHub Discussions: <https://github.com/your-username/powershell-magic/discussions>
+- GitHub Discussions:
+  <https://github.com/wallstop/jason-storey-powershell-magic/issues>
 - Issues: Bug reports and feature requests
 
 ---
@@ -751,7 +753,7 @@ Yes! PowerShell Magic works alongside other modules:
 
 **When to use cookiecutter/yeoman:**
 
-- Need complex variable substitution
+- Need complex scaffolding beyond simple `{{Token}}` replacement
 - Need interactive prompts during generation
 - Cross-platform templates
 
@@ -761,10 +763,11 @@ Yes! PowerShell Magic works alongside other modules:
 
 - **Documentation:** [Complete guides](.)
 - **Troubleshooting:** [Troubleshooting guide](troubleshooting.md)
-- **GitHub:** [Issues and discussions](https://github.com/your-username/powershell-magic)
+- **GitHub:**
+  [Issues and discussions](https://github.com/wallstop/jason-storey-powershell-magic)
 
 ---
 
-**→ [Back to Main README](../README.md)**
-**→ [Troubleshooting](troubleshooting.md)**
-**→ [Installation Guide](installation.md)**
+**→ [Back to Main README](../README.md)** **→
+[Troubleshooting](troubleshooting.md)** **→
+[Installation Guide](installation.md)**
