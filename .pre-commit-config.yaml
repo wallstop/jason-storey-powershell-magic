@@ -58,7 +58,7 @@ repos:
         exclude: 'CHANGELOG.md'
 
 # Global configuration
-default_stages: [commit]
+default_stages: [pre-commit]
 fail_fast: false
 
 # Exclude patterns
