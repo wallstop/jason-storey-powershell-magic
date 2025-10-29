@@ -22,6 +22,18 @@ repos:
         files: '\.(ps1|psm1|psd1)$'
         pass_filenames: false
         description: 'Run PowerShell unit tests'
+      - id: markdown-local-link-check
+        name: Markdown Local Link Check
+        entry: pwsh
+        args:
+          - '-NoLogo'
+          - '-NoProfile'
+          - '-ExecutionPolicy'
+          - 'Bypass'
+          - '-File'
+          - './Scripts/Test-MarkdownLinks.ps1'
+        language: system
+        files: '\.(md|markdown)$'
 
   # General file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
