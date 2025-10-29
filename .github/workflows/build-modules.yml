@@ -1,0 +1,67 @@
+name: Build Modules
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to package (default: 0.0.1)'
+        required: false
+        default: '0.0.1'
+      release:
+        description: 'Treat build as release (sets -Release)'
+        required: false
+        default: 'false'
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      PSCACHE_PATH: ${{ runner.temp }}\ps-cache
+      PSGALLERY_APIKEY: ${{ secrets.PSGALLERY_APIKEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup PowerShellGet Repository
+        shell: pwsh
+        run: |
+          $packagesRoot = Join-Path (Get-Location) 'out/packages'
+          if (-not (Test-Path $packagesRoot)) {
+              New-Item -ItemType Directory -Path $packagesRoot -Force | Out-Null
+          }
+          Register-PSRepository -Name LocalPackages `
+            -SourceLocation $packagesRoot `
+            -PublishLocation $packagesRoot `
+            -InstallationPolicy Trusted
+
+      - name: Build Modules
+        shell: pwsh
+        env:
+          BUILD_VERSION: ${{ github.event.inputs.version || '0.0.1' }}
+          BUILD_RELEASE: ${{ github.event.inputs.release || 'false' }}
+        run: |
+          $releaseSwitch = if ($env:BUILD_RELEASE -eq 'true') { '-Release' } else { '' }
+          pwsh -NoLogo -NoProfile -File .\Scripts\Build-Modules.ps1 -Version $env:BUILD_VERSION @($releaseSwitch.Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries))
+
+      - name: Validate Artifacts
+        shell: pwsh
+        run: |
+          pwsh -NoLogo -NoProfile -File .\Scripts\Test-BuildArtifacts.ps1 `
+            -MetadataPath .\out\packages\module-metadata.json `
+            -PackageRoot .\out\packages
+
+      - name: Upload Packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: module-packages
+          path: out/packages/*.nupkg
+          if-no-files-found: error

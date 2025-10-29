@@ -307,10 +307,12 @@ function Publish-LocalPackage {
 
     $existing = Get-ChildItem -Path $PackagesRoot -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($ModuleInfo.Name).*" }
     if ($existing) {
-        $existing | Remove-Item -Force -Recurse
+        $existing | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
     }
 
-    Register-PSRepository -Name $repoName -SourceLocation $PackagesRoot -PublishLocation $PackagesRoot -InstallationPolicy Trusted -ErrorAction Stop
+    $resolvedPackagesRoot = (Resolve-Path -LiteralPath $PackagesRoot -ErrorAction Stop).ProviderPath
+
+    Register-PSRepository -Name $repoName -SourceLocation $resolvedPackagesRoot -PublishLocation $resolvedPackagesRoot -InstallationPolicy Trusted -PackageManagementProvider 'NuGet' -ErrorAction Stop
     try {
         Publish-Module -Path $ModuleInfo.Path -Repository $repoName -ErrorAction Stop | Out-Null
     } finally {
