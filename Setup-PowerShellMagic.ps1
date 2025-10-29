@@ -38,6 +38,14 @@ When combined with -NonInteractive, automatically answer 'y' to confirmation pro
 .PARAMETER ListPortableDownloads
 Print a manifest of portable download URLs and SHA256 hashes, then exit.
 
+.PARAMETER EnableLogs
+Enable structured logging to a timestamped file during setup execution.
+Logs are written to the install location under `logs\` unless `-LogPath` is supplied.
+
+.PARAMETER LogPath
+Override the log destination. Provide either a directory (a new log file will be
+created per run) or an explicit log file path.
+
 .EXAMPLE
 .\Setup-PowerShellMagic.ps1
 Full automated setup with prompts
@@ -71,7 +79,9 @@ param(
     [string]$InstallLocation,
     [switch]$NonInteractive,
     [switch]$AssumeYes,
-    [switch]$ListPortableDownloads
+    [switch]$ListPortableDownloads,
+    [switch]$EnableLogs,
+    [string]$LogPath
 )
 
 $script:CurrentPlatform = if ($IsWindows) {
@@ -136,6 +146,268 @@ function Get-TempFilePath {
     return Join-Path $tempRoot $FileName
 }
 
+$script:LogFilePath = $null
+$script:SetupLogRetentionCount = 5
+
+function Get-LogTimestamp {
+    return (Get-Date).ToString('yyyy-MM-dd HH:mm:ss.fff')
+}
+
+function Write-StructuredLog {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Level,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Message,
+
+        [ConsoleColor]$Color = [ConsoleColor]::White,
+
+        [switch]$AsWarning,
+        [switch]$AsError
+    )
+
+    $timestamp = Get-LogTimestamp
+    $line = '[{0}] [{1}] {2}' -f $timestamp, $Level, $Message
+
+    if ($AsError) {
+        Microsoft.PowerShell.Utility\Write-Error -Message $line
+    } elseif ($AsWarning) {
+        Microsoft.PowerShell.Utility\Write-Warning $line
+    } else {
+        Write-Host $line -ForegroundColor $Color
+    }
+
+    if ($script:LogFilePath) {
+        try {
+            Add-Content -Path $script:LogFilePath -Value $line -Encoding UTF8 -ErrorAction Stop
+        } catch {
+            Microsoft.PowerShell.Utility\Write-Warning "[WARN] Failed to write to log file '$($script:LogFilePath)': $($_.Exception.Message)"
+        }
+    }
+}
+
+function Write-Success {
+    param($Message)
+    Write-StructuredLog -Level 'OK' -Message $Message -Color Green
+}
+
+function Write-Info {
+    param($Message)
+    Write-StructuredLog -Level 'INFO' -Message $Message -Color Cyan
+}
+
+function Write-WarningMessage {
+    param($Message)
+    Write-StructuredLog -Level 'WARN' -Message $Message -AsWarning
+}
+
+function Write-ErrorMessage {
+    param($Message)
+    Write-StructuredLog -Level 'ERROR' -Message $Message -AsError
+}
+
+function Write-HostWarning {
+    param($Message)
+    Write-StructuredLog -Level 'WARN' -Message $Message -Color Yellow
+}
+
+function Write-HostError {
+    param($Message)
+    Write-StructuredLog -Level 'ERROR' -Message $Message -Color Red
+}
+
+function Reset-SetupLogging {
+    $script:LogFilePath = $null
+}
+
+function Initialize-SetupLogging {
+    if (-not $EnableLogs) {
+        Reset-SetupLogging
+        return $null
+    }
+
+    $requestedPath = $LogPath
+    $expandedPath = if ($requestedPath) {
+        [System.Environment]::ExpandEnvironmentVariables($requestedPath)
+    } else {
+        $null
+    }
+
+    $logsRoot = $null
+    $targetFile = $null
+    $isExplicitFile = $false
+
+    if ($expandedPath) {
+        $existingItem = $null
+        try {
+            $existingItem = Get-Item -LiteralPath $expandedPath -ErrorAction Stop
+        } catch {
+            $existingItem = $null
+        }
+
+        if ($existingItem) {
+            if ($existingItem.PSIsContainer) {
+                $logsRoot = $existingItem.FullName
+            } else {
+                $isExplicitFile = $true
+                $targetFile = $existingItem.FullName
+                $logsRoot = $existingItem.DirectoryName
+            }
+        } else {
+            $extension = [System.IO.Path]::GetExtension($expandedPath)
+            if ($extension) {
+                $isExplicitFile = $true
+                try {
+                    $targetFile = [System.IO.Path]::GetFullPath($expandedPath)
+                } catch {
+                    $targetFile = $expandedPath
+                }
+                $logsRoot = [System.IO.Path]::GetDirectoryName($targetFile)
+            } else {
+                try {
+                    $logsRoot = [System.IO.Path]::GetFullPath($expandedPath)
+                } catch {
+                    $logsRoot = $expandedPath
+                }
+            }
+        }
+    }
+
+    if (-not $logsRoot) {
+        $defaultRoot = Join-Path $InstallLocation 'logs'
+        try {
+            $logsRoot = [System.IO.Path]::GetFullPath($defaultRoot)
+        } catch {
+            $logsRoot = $defaultRoot
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($logsRoot)) {
+        Reset-SetupLogging
+        Write-StructuredLog -Level 'WARN' -Message 'Logging requested but log directory could not be determined.' -AsWarning
+        return $null
+    }
+
+    try {
+        if (-not (Test-Path -LiteralPath $logsRoot)) {
+            New-Item -ItemType Directory -Path $logsRoot -Force | Out-Null
+        }
+    } catch {
+        Reset-SetupLogging
+        Write-StructuredLog -Level 'WARN' -Message ("Failed to prepare log directory '{0}': {1}" -f $logsRoot, $_.Exception.Message) -AsWarning
+        return $null
+    }
+
+    if ($isExplicitFile) {
+        if (-not $targetFile) {
+            $targetFile = Join-Path $logsRoot ('setup-{0}.log' -f (Get-Date).ToString('yyyyMMdd-HHmmss-fff'))
+        }
+
+        $targetDirectory = [System.IO.Path]::GetDirectoryName($targetFile)
+        if (-not [string]::IsNullOrWhiteSpace($targetDirectory) -and -not (Test-Path -LiteralPath $targetDirectory)) {
+            try {
+                New-Item -ItemType Directory -Path $targetDirectory -Force | Out-Null
+            } catch {
+                Reset-SetupLogging
+                Write-StructuredLog -Level 'WARN' -Message ("Failed to prepare log directory '{0}': {1}" -f $targetDirectory, $_.Exception.Message) -AsWarning
+                return $null
+            }
+        }
+
+        $script:LogFilePath = $targetFile
+    } else {
+        $logFileName = 'setup-{0}.log' -f (Get-Date).ToString('yyyyMMdd-HHmmss-fff')
+        $script:LogFilePath = Join-Path $logsRoot $logFileName
+    }
+
+    try {
+        $logHeader = '[{0}] [INFO] Setup log created.' -f (Get-LogTimestamp)
+        Set-Content -Path $script:LogFilePath -Value $logHeader -Encoding UTF8 -Force
+    } catch {
+        $failedPath = $script:LogFilePath
+        Reset-SetupLogging
+        Write-StructuredLog -Level 'WARN' -Message ('Unable to create log file at {0}: {1}' -f $failedPath, $_.Exception.Message) -AsWarning
+        return $null
+    }
+
+    Write-StructuredLog -Level 'INFO' -Message ('Logging enabled. Writing to {0}' -f $script:LogFilePath) -Color Cyan
+
+    if (-not $isExplicitFile) {
+        try {
+            $retentionCount = if ($script:SetupLogRetentionCount -is [int] -and $script:SetupLogRetentionCount -gt 0) {
+                $script:SetupLogRetentionCount
+            } else {
+                5
+            }
+
+            $existingLogs = Get-ChildItem -Path $logsRoot -Filter 'setup-*.log' -File -ErrorAction Stop | Sort-Object LastWriteTime -Descending
+            if ($existingLogs.Count -gt $retentionCount) {
+                $logsToRemove = $existingLogs | Select-Object -Skip $retentionCount
+                foreach ($oldLog in $logsToRemove) {
+                    try {
+                        Remove-Item -Path $oldLog.FullName -Force -ErrorAction Stop
+                    } catch {
+                        Write-StructuredLog -Level 'WARN' -Message ("Failed to remove old log '{0}': {1}" -f $oldLog.FullName, $_.Exception.Message) -AsWarning
+                    }
+                }
+            }
+        } catch {
+            Write-StructuredLog -Level 'WARN' -Message ('Failed to manage log retention: {0}' -f $_.Exception.Message) -AsWarning
+        }
+    }
+
+    return $script:LogFilePath
+}
+
+function Get-SetupLogFilePath {
+    return $script:LogFilePath
+}
+
+function Get-SetupLogRetentionCount {
+    return $script:SetupLogRetentionCount
+}
+
+function Set-SetupLogRetentionCount {
+    param(
+        [Parameter(Mandatory = $true)]
+        [int]$Value
+    )
+
+    if ($Value -le 0) {
+        $script:SetupLogRetentionCount = 1
+    } else {
+        $script:SetupLogRetentionCount = $Value
+    }
+
+    return $script:SetupLogRetentionCount
+}
+
+function Get-DependencyCacheDirectory {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$DependencyName
+    )
+
+    $cacheRoot = Join-Path $InstallLocation 'cache'
+    if (-not (Test-Path $cacheRoot)) {
+        New-Item -ItemType Directory -Path $cacheRoot -Force | Out-Null
+    }
+
+    $safeName = if ([string]::IsNullOrWhiteSpace($DependencyName)) {
+        'dependency'
+    } else {
+        $DependencyName -replace '[^A-Za-z0-9_\-]', '_'
+    }
+
+    $dependencyCache = Join-Path $cacheRoot $safeName
+    if (-not (Test-Path $dependencyCache)) {
+        New-Item -ItemType Directory -Path $dependencyCache -Force | Out-Null
+    }
+
+    return $dependencyCache
+}
+
 function Get-PathSeparator {
     if ($IsWindows) { return ';' }
     return ':'
@@ -177,31 +449,7 @@ if (-not $InstallLocation) {
     $InstallLocation = Get-DefaultInstallLocation
 }
 
-# Color output functions
-function Write-Success {
-    param($Message)
-    Write-Host "[OK] $Message" -ForegroundColor Green
-}
-function Write-Info {
-    param($Message)
-    Write-Host "[INFO] $Message" -ForegroundColor Cyan
-}
-function Write-WarningMessage {
-    param($Message)
-    Microsoft.PowerShell.Utility\Write-Warning "[WARN] $Message"
-}
-function Write-ErrorMessage {
-    param($Message)
-    Microsoft.PowerShell.Utility\Write-Error -Message "[ERROR] $Message"
-}
-function Write-HostWarning {
-    param($Message)
-    Write-Host "[WARN] $Message" -ForegroundColor Yellow
-}
-function Write-HostError {
-    param($Message)
-    Write-Host "[ERROR] $Message" -ForegroundColor Red
-}
+Initialize-SetupLogging
 
 # Prompt helper function for non-interactive mode
 function Get-UserResponse {
@@ -617,14 +865,18 @@ function Test-Dependency {
 function Install-DependencyPortable {
     param($Dependency)
 
+    $tempFile = $null
+    $cleanupTemp = $false
+    $sourceFile = $null
+
     if (-not $Dependency.PortableAssets) {
-        Write-Warning "No portable installation assets defined for $($Dependency.Name)"
+        Write-WarningMessage "No portable installation assets defined for $($Dependency.Name)"
         return $false
     }
 
     $asset = $Dependency.PortableAssets[$script:CurrentPlatform]
     if (-not $asset) {
-        Write-Warning "$($Dependency.Name) does not provide a portable asset for $script:CurrentPlatform"
+        Write-WarningMessage "$($Dependency.Name) does not provide a portable asset for $script:CurrentPlatform"
         return $false
     }
 
@@ -633,58 +885,114 @@ function Install-DependencyPortable {
     $portableExe = $asset.Executable
     $archiveType = ($asset.ArchiveType ?? '').ToLowerInvariant()
 
-    Write-Warning "SECURITY NOTICE: This will download and execute software from: $portableUrl"
+    Write-WarningMessage "SECURITY NOTICE: This will download and execute software from: $portableUrl"
     if ($portableHash) {
-        Write-Warning "Download will be verified with SHA256: $portableHash"
+        Write-WarningMessage "Download will be verified with SHA256: $portableHash"
     } else {
-        Write-Warning 'No checksum is available; verification will be skipped'
+        Write-WarningMessage 'No checksum is available; verification will be skipped'
     }
-    Write-Warning 'This will modify your user PATH environment variable'
+    Write-WarningMessage 'This will modify your user PATH environment variable'
 
     $confirm = Get-UserResponse "Do you want to proceed with downloading $($Dependency.Name)? Type 'YES' to confirm" 'NO'
     if ($confirm -ne 'YES') {
-        Write-Warning 'Installation cancelled by user'
+        Write-WarningMessage 'Installation cancelled by user'
         return $false
     }
 
-    $installDir = Join-Path $InstallLocation 'bin'
-    if (-not (Test-Path $installDir)) {
-        New-Item -ItemType Directory -Path $installDir -Force | Out-Null
-    }
-
-    $tempFileName = '{0}-{1}' -f $Dependency.Name, ([System.IO.Path]::GetFileName($portableUrl) ?? 'portable.tmp')
-    $tempFile = Get-TempFilePath -FileName $tempFileName
-
     try {
-        Write-Info "Downloading $($Dependency.Name) from $portableUrl..."
-
-        # Use modern download method
-        if ($PSVersionTable.PSVersion.Major -ge 3) {
-            Invoke-WebRequest -Uri $portableUrl -OutFile $tempFile -UseBasicParsing -ErrorAction Stop
-        } else {
-            $webClient = New-Object System.Net.WebClient
-            $webClient.DownloadFile($portableUrl, $tempFile)
-            $webClient.Dispose()
+        $installDir = Join-Path $InstallLocation 'bin'
+        if (-not (Test-Path $installDir)) {
+            New-Item -ItemType Directory -Path $installDir -Force | Out-Null
         }
 
-        # Verify downloaded file
-        Write-Info 'Verifying download integrity...'
-        if (-not (Test-FileHash -FilePath $tempFile -ExpectedHash $portableHash)) {
-            Write-ErrorMessage 'File verification failed. Aborting installation.'
-            return $false
+        $cacheDir = Get-DependencyCacheDirectory -DependencyName $Dependency.Name
+        $originalFileName = [System.IO.Path]::GetFileName($portableUrl)
+        if ([string]::IsNullOrWhiteSpace($originalFileName)) {
+            $originalFileName = "$($Dependency.Name).download"
+        }
+
+        $extension = [System.IO.Path]::GetExtension($originalFileName)
+        if ([string]::IsNullOrWhiteSpace($extension)) {
+            $extension = '.bin'
+        }
+
+        $baseName = [System.IO.Path]::GetFileNameWithoutExtension($originalFileName)
+        if ([string]::IsNullOrWhiteSpace($baseName)) {
+            $baseName = $Dependency.Name
+        }
+
+        $cacheFileName = if ($portableHash) {
+            $hashFragment = $portableHash.Substring(0, [Math]::Min(8, $portableHash.Length))
+            '{0}-{1}{2}' -f $baseName, $hashFragment, $extension
+        } else {
+            $originalFileName
+        }
+
+        $cacheFile = Join-Path $cacheDir $cacheFileName
+
+        if (Test-Path $cacheFile) {
+            if ($portableHash) {
+                Write-Info "Validating cached download for $($Dependency.Name)..."
+                if (Test-FileHash -FilePath $cacheFile -ExpectedHash $portableHash) {
+                    Write-Info "Using cached download for $($Dependency.Name)."
+                    $sourceFile = $cacheFile
+                } else {
+                    Write-WarningMessage "Cached download for $($Dependency.Name) failed verification. Removing cached file."
+                    Remove-Item -Path $cacheFile -Force -ErrorAction SilentlyContinue
+                }
+            } else {
+                Write-Info "Using cached download for $($Dependency.Name)."
+                $sourceFile = $cacheFile
+            }
+        }
+
+        if (-not $sourceFile) {
+            $tempFileName = '{0}-{1}' -f $Dependency.Name, ([System.IO.Path]::GetFileName($portableUrl) ?? 'portable.tmp')
+            $tempFile = Get-TempFilePath -FileName $tempFileName
+            $cleanupTemp = $true
+
+            Write-Info "Downloading $($Dependency.Name) from $portableUrl..."
+
+            if ($PSVersionTable.PSVersion.Major -ge 3) {
+                Invoke-WebRequest -Uri $portableUrl -OutFile $tempFile -UseBasicParsing -ErrorAction Stop
+            } else {
+                $webClient = New-Object System.Net.WebClient
+                $webClient.DownloadFile($portableUrl, $tempFile)
+                $webClient.Dispose()
+            }
+
+            if ($portableHash) {
+                Write-Info 'Verifying download integrity...'
+                if (-not (Test-FileHash -FilePath $tempFile -ExpectedHash $portableHash)) {
+                    Write-ErrorMessage 'File verification failed. Aborting installation.'
+                    return $false
+                }
+            } else {
+                Write-WarningMessage 'No checksum provided; skipping verification.'
+            }
+
+            try {
+                Copy-Item -Path $tempFile -Destination $cacheFile -Force
+                Write-Info "Cached download saved to $cacheFile."
+                $sourceFile = if (Test-Path $cacheFile) { $cacheFile } else { $tempFile }
+            } catch {
+                Write-WarningMessage "Failed to update cache for $($Dependency.Name): $($_.Exception.Message)"
+                $sourceFile = $tempFile
+            }
         }
 
         $extractedPath = $null
+        $skipPortableSearch = $false
         switch ($archiveType) {
             'zip' {
                 Write-Info "Extracting $($Dependency.Name) archive..."
                 Add-Type -AssemblyName System.IO.Compression.FileSystem
-                [System.IO.Compression.ZipFile]::ExtractToDirectory($tempFile, $installDir, $true)
+                [System.IO.Compression.ZipFile]::ExtractToDirectory($sourceFile, $installDir, $true)
                 $extractedPath = $installDir
             }
             { $_ -in @('tar.gz', 'tgz') } {
                 Write-Info "Extracting $($Dependency.Name) tar archive..."
-                $tarArgs = @('-xzf', $tempFile, '-C', $installDir)
+                $tarArgs = @('-xzf', $sourceFile, '-C', $installDir)
                 $tarResult = & tar @tarArgs 2>&1
                 if ($LASTEXITCODE -ne 0) {
                     Write-ErrorMessage "Failed to extract tar archive: $tarResult"
@@ -694,7 +1002,7 @@ function Install-DependencyPortable {
             }
             { $_ -in @('tar.xz', 'txz') } {
                 Write-Info "Extracting $($Dependency.Name) tar archive..."
-                $tarArgs = @('-xJf', $tempFile, '-C', $installDir)
+                $tarArgs = @('-xJf', $sourceFile, '-C', $installDir)
                 $tarResult = & tar @tarArgs 2>&1
                 if ($LASTEXITCODE -ne 0) {
                     Write-ErrorMessage "Failed to extract tar archive: $tarResult"
@@ -704,7 +1012,7 @@ function Install-DependencyPortable {
             }
             { $_ -in @('tar.bz2', 'tbz', 'tbz2') } {
                 Write-Info "Extracting $($Dependency.Name) tar archive..."
-                $tarArgs = @('-xjf', $tempFile, '-C', $installDir)
+                $tarArgs = @('-xjf', $sourceFile, '-C', $installDir)
                 $tarResult = & tar @tarArgs 2>&1
                 if ($LASTEXITCODE -ne 0) {
                     Write-ErrorMessage "Failed to extract tar archive: $tarResult"
@@ -719,33 +1027,33 @@ function Install-DependencyPortable {
                 }
 
                 $finalPath = Join-Path $installDir ($portableExe ?? "$($Dependency.Name).exe")
-                Move-Item -Path $tempFile -Destination $finalPath -Force
+                Copy-Item -Path $sourceFile -Destination $finalPath -Force
                 $extractedPath = Split-Path -Parent $finalPath
+                $skipPortableSearch = $true
             }
             default {
-                # Unknown archive types: treat as direct binary
                 $finalName = $portableExe
                 if (-not $finalName) {
                     $finalName = [System.IO.Path]::GetFileName($portableUrl)
                 }
-                if (-not $finalName) {
+                if ([string]::IsNullOrWhiteSpace($finalName)) {
                     $finalName = "$($Dependency.Name).bin"
                 }
 
                 $finalPath = Join-Path $installDir $finalName
-                Move-Item -Path $tempFile -Destination $finalPath -Force
+                Copy-Item -Path $sourceFile -Destination $finalPath -Force
                 $extractedPath = Split-Path -Parent $finalPath
+                $skipPortableSearch = $true
             }
         }
 
-        if ($archiveType -ne 'exe') {
-            # Locate executable if provided
+        if (-not $skipPortableSearch -and $archiveType -ne 'exe') {
             if ($portableExe) {
                 $extractedExe = Get-ChildItem -Path $installDir -Recurse -Filter $portableExe -File -ErrorAction SilentlyContinue | Select-Object -First 1
                 if ($extractedExe) {
                     $finalPath = Join-Path $installDir $portableExe
                     if ($extractedExe.FullName -ne $finalPath) {
-                        Move-Item -Path $extractedExe.FullName -Destination $finalPath -Force
+                        Copy-Item -Path $extractedExe.FullName -Destination $finalPath -Force
                         $extractedPath = Split-Path -Parent $finalPath
                     } else {
                         $extractedPath = Split-Path -Parent $extractedExe.FullName
@@ -761,14 +1069,13 @@ function Install-DependencyPortable {
             }
         }
 
-        # Add to PATH if not already there
         $pathScope = if ($IsWindows) { 'User' } else { 'Process' }
         $currentPath = [Environment]::GetEnvironmentVariable('PATH', $pathScope)
         if (-not $currentPath) { $currentPath = '' }
 
         if ($currentPath -notlike "*$installDir*") {
             $separator = Get-PathSeparator
-            Write-Warning 'About to modify your PATH environment variable'
+            Write-WarningMessage 'About to modify your PATH environment variable'
             Write-Info "Current PATH: $currentPath"
             Write-Info "Will add: $installDir"
 
@@ -779,7 +1086,7 @@ function Install-DependencyPortable {
                 [Environment]::SetEnvironmentVariable('PATH', $newPath, $pathScope)
                 $env:PATH = if ([string]::IsNullOrWhiteSpace($env:PATH)) { $newPath } else { "$env:PATH$separator$installDir" }
             } else {
-                Write-Warning "PATH not modified. You'll need to manually add $installDir to PATH to use $($Dependency.Name)"
+                Write-WarningMessage "PATH not modified. You'll need to manually add $installDir to PATH to use $($Dependency.Name)"
             }
         }
 
@@ -790,7 +1097,7 @@ function Install-DependencyPortable {
         Write-ErrorMessage "Failed to install $($Dependency.Name): $($_.Exception.Message)"
         return $false
     } finally {
-        if (Test-Path $tempFile) {
+        if ($cleanupTemp -and $tempFile -and (Test-Path $tempFile)) {
             Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
         }
     }
@@ -1310,4 +1617,3 @@ if ($ListPortableDownloads) {
 } else {
     Main
 }
-

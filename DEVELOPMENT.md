@@ -6,7 +6,7 @@ This guide covers the development tools and workflow for PowerShell Magic contri
 
 ```powershell
 # 1. Clone and enter repository
-git clone https://github.com/your-username/powershell-magic.git
+git clone https://github.com/wallstop/jason-storey-powershell-magic.git
 cd powershell-magic
 
 # 2. Set up development environment
@@ -41,6 +41,7 @@ cd powershell-magic
 ```powershell
 .\Tests\Test-PowerShellMagic.ps1               # Run all tests
 .\Tests\Test-PowerShellMagic.ps1 -TestName Setup     # Run setup tests only
+.\Tests\Test-PowerShellMagic.ps1 -TestName Common    # Run shared utility tests only
 .\Tests\Test-PowerShellMagic.ps1 -TestName QuickJump # Run QuickJump tests only
 .\Tests\Test-PowerShellMagic.ps1 -Verbose            # Verbose output
 ```
@@ -77,6 +78,20 @@ cd powershell-magic
 .\Run-Tests.ps1 -CI
 ```
 
+## 🧩 Module Layout
+
+- Modules are adopting a `Private/` + `Public/` split so helpers stay isolated
+  from exported cmdlets. QuickJump, Templater, and Unitea already follow this
+  structure (`Modules/<Module>/Private/*.ps1`,
+  `Modules/<Module>/Public/*.ps1`).
+- Each module’s root `.psm1` dot-sources the scripts in those folders; follow
+  the same pattern for new modules or when extracting additional helpers.
+- Keep `FunctionsToExport` in each module manifest accurate when adding new
+  public commands, and run the focused test suite (for example,
+  `.\Tests\Test-PowerShellMagic.ps1 -TestName QuickJump`) after restructuring.
+- Prefer one logical area per script file—group related helper functions
+  together so future modules can reuse them by dot-sourcing the private file.
+
 ## 🧪 Test Architecture
 
 ### Test Coverage
@@ -86,11 +101,14 @@ cd powershell-magic
 - **Command Exports**: Expected commands are available
 - **Dependency Handling**: Graceful failure without external tools
 - **Configuration**: Config path functions work correctly
+- **Common Utilities**: Shared helpers for config paths,
+  non-interactive mode, and `fzf` probing
 - **Code Quality**: Formatter and analyzer functionality
 
 ### Test Design
 
-- **No External Dependencies**: Tests run without fzf, 7-Zip, eza, Unity Hub
+- **No External Dependencies**: Tests run without fzf, 7-Zip, eza, or Unity
+  Hub
 - **Mocked Dependencies**: Where external tools are needed
 - **Syntax Validation**: PowerShell AST parsing for all scripts
 - **Module Structure**: Validates proper module organization

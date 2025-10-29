@@ -667,7 +667,7 @@ See [Contributing Guidelines](../CONTRIBUTING.md)
 
 ### Where do I report bugs?
 
-GitHub Issues: <https://github.com/your-username/powershell-magic/issues>
+GitHub Issues: <https://github.com/wallstop/jason-storey-powershell-magic/issues>
 
 Include:
 
@@ -682,7 +682,7 @@ Yes! GitHub Discussions or Issues.
 
 ### Is there a community?
 
-- GitHub Discussions: <https://github.com/your-username/powershell-magic/discussions>
+- GitHub Discussions: <https://github.com/wallstop/jason-storey-powershell-magic/discussions>
 - Issues: Bug reports and feature requests
 
 ---
@@ -751,7 +751,7 @@ Yes! PowerShell Magic works alongside other modules:
 
 **When to use cookiecutter/yeoman:**
 
-- Need complex variable substitution
+- Need complex scaffolding beyond simple `{{Token}}` replacement
 - Need interactive prompts during generation
 - Cross-platform templates
 
@@ -761,7 +761,7 @@ Yes! PowerShell Magic works alongside other modules:
 
 - **Documentation:** [Complete guides](.)
 - **Troubleshooting:** [Troubleshooting guide](troubleshooting.md)
-- **GitHub:** [Issues and discussions](https://github.com/your-username/powershell-magic)
+- **GitHub:** [Issues and discussions](https://github.com/wallstop/jason-storey-powershell-magic)
 
 ---
 

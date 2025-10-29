@@ -730,13 +730,13 @@ Get-Content $PROFILE
    - [FAQ](faq.md)
 
 2. **Report an issue:**
-   - GitHub Issues: <https://github.com/your-username/powershell-magic/issues>
+   - GitHub Issues: <https://github.com/wallstop/jason-storey-powershell-magic/issues>
    - Include diagnostic information above
    - Describe steps to reproduce
    - Include error messages
 
 3. **Community support:**
-   - GitHub Discussions: <https://github.com/your-username/powershell-magic/discussions>
+   - GitHub Discussions: <https://github.com/wallstop/jason-storey-powershell-magic/discussions>
 
 ---
 

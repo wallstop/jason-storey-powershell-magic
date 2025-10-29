@@ -4,7 +4,7 @@
     GUID = 'a1b2c3d4-e5f6-1190-1234-567a90abcdef'
     Author = 'Jason Storey'
     Description = 'Utility functions for Unity Projects'
-    PowerShellVersion = '5.1'
+    PowerShellVersion = '7.0'
     FunctionsToExport = @(
         'Open-UnityProject',
         'Add-UnityProject',
@@ -20,6 +20,8 @@
     PrivateData = @{
         PSData = @{
             Tags = @('Unity', 'ProjectManagement', 'FZF')
+            ProjectUri = 'https://github.com/wallstop/jason-storey-powershell-magic'
+            LicenseUri = 'https://opensource.org/licenses/MIT'
             ReleaseNotes = 'Added config path function and enhanced interactive remove'
         }
     }

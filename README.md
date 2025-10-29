@@ -84,7 +84,7 @@ and managing Unity games much faster and easier through your command line.
 
 ```powershell
 # 1. Clone or download this repository
-git clone https://github.com/your-username/powershell-magic.git
+git clone https://github.com/wallstop/jason-storey-powershell-magic.git
 cd powershell-magic
 
 # 2. Run the setup script (prompts before changes on all platforms)
@@ -109,6 +109,15 @@ pwsh ./Setup-PowerShellMagic.ps1
   - **Linux:** apt, dnf, pacman, or your distro's package manager
 
 **→ [Full Installation Guide](docs/installation.md)**
+
+### What You Need
+
+- **PowerShell 7.0+** — install from [GitHub releases](https://github.com/PowerShell/PowerShell)
+  or your package manager.
+- **fzf (optional)** — enables lightning-fast fuzzy pickers across all modules.
+- **7-Zip / 7zz (optional)** — required only when working with archive-based templates.
+- **eza (optional)** — modern directory listings surfaced by the setup helper.
+- **Unity Hub (optional)** — needed to launch projects through the Unitea module.
 
 ### Your First Commands
 
@@ -194,6 +203,9 @@ templates
 # Use a template
 use-tpl react-starter                    # Deploy in current directory
 use-tpl react-starter -CreateSubfolder   # Create subfolder automatically
+use-tpl react-starter `
+    -Variables @{ ProjectName = 'Alpha'; Description = 'Internal tool' } `
+    -SubfolderName '{{ProjectName}}-app' # Token replacement for names + files
 
 # Manage templates
 templates -Category web              # Filter by category
@@ -206,9 +218,18 @@ Export-Templates -Path backup.json   # Backup your templates
 - 📦 **Multiple formats** (ZIP, 7Z, RAR, TAR archives, or plain folders)
 - 🏷️ **Organize** with categories and tags
 - 👀 **Preview** template contents before deploying
+- 🧩 **Token substitution** with `Use-Template -Variables` applied to
+  `{{VariableName}}` placeholders
 - 📊 **Statistics** track which templates you use most
 - 💾 **Import/Export** share templates with your team
 - 🔍 **Fuzzy finding** quickly find the right template
+
+##### Token Replacement with `{{VariableName}}`
+
+- Add tokens to file/folder names and file contents (`src/{{ProjectName}}/README.md`).
+- Deploy with values:
+  `Use-Template -Alias api -Variables @{ ProjectName = 'Orders' }`.
+- Extend or limit processed extensions with `-VariableExtensions`.
 
 **→ [Complete Templater Guide](docs/templater-guide.md)**
 
@@ -299,7 +320,7 @@ The setup script works identically on all platforms and makes installation a bre
 
 ```powershell
 # Clone the repository
-git clone https://github.com/your-username/powershell-magic.git
+git clone https://github.com/wallstop/jason-storey-powershell-magic.git
 cd powershell-magic
 
 # Run the setup script
@@ -367,6 +388,7 @@ If you see the commands listed, you're all set!
 | **[FAQ](docs/faq.md)** | Frequently asked questions |
 | **[Command Reference](docs/command-reference.md)** | Complete command and parameter reference |
 | **[Configuration](docs/configuration.md)** | Advanced customization, config files |
+| **[Publishing Guide](docs/publishing.md)** | Packaging strategy, gallery releases, automation plan |
 
 ### Quick Command Reference
 
@@ -682,8 +704,9 @@ winget install junegunn.fzf
 # Then restart PowerShell
 ```
 
-**Note:** Without fzf, you can still use aliases directly (for example,
-`qj myproject`). You won't have the interactive fuzzy finder.
+**Note:** Without fzf, commands fall back to simple numbered menus (you can
+still run aliases like `qj myproject`), but you lose fuzzy search speed and
+previews.
 
 </details>
 
@@ -777,6 +800,18 @@ code (Get-QuickJumpConfigPath)
 **Alternative:** Use folder-based templates instead of archives.
 
 </details>
+
+### Setup Logging & Diagnostics
+
+- Run `.\Setup-PowerShellMagic.ps1 -EnableLogs` when you need a persistent
+  trace of setup actions.
+- Logs are written to `%LOCALAPPDATA%\PowerShellMagic\logs\setup-<timestamp>.log`
+  (or the platform-equivalent install directory) by default.
+- Provide `-LogPath` to choose a different destination. Point it at a directory
+  for timestamped files, or specify an explicit `.log` path to capture the
+  current run at a fixed location.
+- The last five setup logs are retained automatically; older files are pruned
+  after each run so the log folder stays manageable.
 
 **→ [Complete Troubleshooting Guide](docs/troubleshooting.md)**
 
@@ -998,6 +1033,6 @@ If PowerShell Magic saves you time and frustration:
 [badge-macos]: https://img.shields.io/badge/Platform-macOS-000000?logo=apple&logoColor=white
 [badge-linux]: https://img.shields.io/badge/Platform-Linux-FCC624?logo=linux&logoColor=black
 [link-pwsh]: https://github.com/PowerShell/PowerShell
-[link-issues]: https://github.com/your-username/powershell-magic/issues
-[link-discussions]: https://github.com/your-username/powershell-magic/discussions
+[link-issues]: https://github.com/wallstop/jason-storey-powershell-magic/issues
+[link-discussions]: https://github.com/wallstop/jason-storey-powershell-magic/discussions
 [link-ms-docs]: https://docs.microsoft.com/en-us/powershell/

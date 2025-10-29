@@ -10,7 +10,7 @@ external dependencies. It tests setup functionality, module loading, and
 core features using mocked dependencies where needed.
 
 .PARAMETER TestName
-Run specific test. Options: Setup, QuickJump, Templater, Unitea, All
+Run specific test. Options: Setup, Common, QuickJump, Templater, Unitea, All
 
 .PARAMETER Verbose
 Show detailed test output
@@ -30,7 +30,7 @@ Run all tests with detailed output
 
 [CmdletBinding()]
 param(
-    [ValidateSet('Setup', 'QuickJump', 'Templater', 'Unitea', 'All')]
+    [ValidateSet('Setup', 'Common', 'QuickJump', 'Templater', 'Unitea', 'All')]
     [string]$TestName = 'All'
 )
 
@@ -197,6 +197,180 @@ function Test-Setup {
         } else {
             Assert-True -Condition $false -Message 'Dependencies include 7-Zip entry'
         }
+
+        # Portable download caching regression
+        $cacheTestRoot = $null
+        $originalInstallLocation = $InstallLocation
+        $originalGetUserResponseScript = $null
+        $existingInvokeScript = $null
+
+        try {
+            $cacheTestRoot = Join-Path $PSScriptRoot '..\TestArtifacts\SetupCache'
+            if (Test-Path $cacheTestRoot) {
+                Remove-Item -Path $cacheTestRoot -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            New-Item -ItemType Directory -Path $cacheTestRoot -Force | Out-Null
+
+            $sourceDir = Join-Path $cacheTestRoot 'source'
+            New-Item -ItemType Directory -Path $sourceDir -Force | Out-Null
+
+            $binaryName = if ($IsWindows) { 'test-tool.exe' } else { 'test-tool' }
+            $sourceFile = Join-Path $sourceDir $binaryName
+            Set-Content -Path $sourceFile -Value 'portable download content' -Encoding UTF8 -Force
+            $fileHash = (Get-FileHash -Path $sourceFile -Algorithm SHA256).Hash
+
+            $dependencyObject = [pscustomobject]@{
+                Name = 'test-tool'
+                Description = 'Test portable dependency'
+                PortableAssets = @{
+                    $script:CurrentPlatform = @{
+                        Url = $sourceFile
+                        Sha256 = $fileHash
+                        Executable = $binaryName
+                    }
+                }
+            }
+
+            $originalInstallLocation = $InstallLocation
+            $InstallLocation = $cacheTestRoot
+
+            $existingResponseFunction = Get-Command Get-UserResponse -CommandType Function -ErrorAction SilentlyContinue
+            if ($existingResponseFunction) {
+                $originalGetUserResponseScript = $existingResponseFunction.ScriptBlock
+            }
+            Set-Item Function:Get-UserResponse -Value {
+                param($Prompt, $Default)
+                'YES'
+            } -Force
+
+            $existingInvokeFunction = Get-Command Invoke-WebRequest -CommandType Function -ErrorAction SilentlyContinue
+            if ($existingInvokeFunction) {
+                $existingInvokeScript = $existingInvokeFunction.ScriptBlock
+            }
+
+            $global:PortableDownloadCounter = 0
+            Set-Item Function:Invoke-WebRequest -Value {
+                param(
+                    [Parameter(Mandatory = $true)]
+                    [string]$Uri,
+
+                    [Parameter(Mandatory = $true)]
+                    [string]$OutFile,
+
+                    [Parameter(ValueFromRemainingArguments = $true)]
+                    $AdditionalParameters
+                )
+
+                $global:PortableDownloadCounter++
+                Copy-Item -LiteralPath $Uri -Destination $OutFile -Force
+            } -Force
+
+            $firstInstall = Install-DependencyPortable -Dependency $dependencyObject
+            Assert-True -Condition $firstInstall -Message 'Portable install succeeds on first run'
+            Assert-Equal -Expected 1 -Actual $global:PortableDownloadCounter -Message 'First install performs a download'
+
+            $cacheDir = Join-Path (Join-Path $cacheTestRoot 'cache') 'test-tool'
+            Assert-True -Condition (Test-Path $cacheDir) -Message 'Dependency cache directory created'
+            $cachedFiles = Get-ChildItem -Path $cacheDir -File -ErrorAction SilentlyContinue
+            Assert-True -Condition ($cachedFiles.Count -ge 1) -Message 'Cached download persisted for dependency'
+
+            $secondInstall = Install-DependencyPortable -Dependency $dependencyObject
+            Assert-True -Condition $secondInstall -Message 'Portable install succeeds when cache is present'
+            Assert-Equal -Expected 1 -Actual $global:PortableDownloadCounter -Message 'Cached install avoids repeat download'
+
+            $installedBinary = Join-Path (Join-Path $cacheTestRoot 'bin') $binaryName
+            Assert-True -Condition (Test-Path $installedBinary) -Message 'Portable binary deployed to install directory'
+        } catch {
+            Write-TestWarning "Portable caching test failed: $($_.Exception.Message)"
+            throw
+        } finally {
+            if ($originalGetUserResponseScript) {
+                Set-Item Function:Get-UserResponse -Value $originalGetUserResponseScript -Force
+            } else {
+                Remove-Item Function:Get-UserResponse -Force -ErrorAction SilentlyContinue
+            }
+
+            if ($existingInvokeScript) {
+                Set-Item Function:Invoke-WebRequest -Value $existingInvokeScript -Force
+            } else {
+                Remove-Item Function:Invoke-WebRequest -Force -ErrorAction SilentlyContinue
+            }
+
+            if ($null -ne $originalInstallLocation) {
+                $InstallLocation = $originalInstallLocation
+            }
+
+            if (Get-Variable -Name PortableDownloadCounter -Scope Global -ErrorAction SilentlyContinue) {
+                Remove-Variable -Name PortableDownloadCounter -Scope Global -ErrorAction SilentlyContinue
+            }
+
+            if ($cacheTestRoot -and (Test-Path $cacheTestRoot)) {
+                Remove-Item -Path $cacheTestRoot -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+
+        # Structured logging regression
+        $logTestRoot = $null
+        $explicitLogFile = $null
+        $originalRetentionValue = $null
+        try {
+            $logTestRoot = Join-Path $PSScriptRoot '..\TestArtifacts\SetupLogs'
+            if (Test-Path $logTestRoot) {
+                Remove-Item -Path $logTestRoot -Recurse -Force -ErrorAction SilentlyContinue
+            }
+
+            $EnableLogs = $true
+            $LogPath = $logTestRoot
+            $originalRetentionValue = Get-SetupLogRetentionCount
+            Set-SetupLogRetentionCount -Value 3 | Out-Null
+
+            Reset-SetupLogging
+            $currentLogFile = Initialize-SetupLogging
+
+            Assert-True -Condition (Test-Path $logTestRoot) -Message 'Log directory created when logging enabled'
+            Assert-True -Condition (-not [string]::IsNullOrWhiteSpace($currentLogFile)) -Message 'Log file path established'
+            Assert-True -Condition (Test-Path $currentLogFile) -Message 'Log file created on initialization'
+
+            $testLogMessage = "Logging verification entry $([Guid]::NewGuid().ToString())"
+            Write-Info $testLogMessage
+            $logContent = Get-Content -Path $currentLogFile -Raw -ErrorAction Stop
+            Assert-True -Condition ($logContent -match [Regex]::Escape($testLogMessage)) -Message 'Log file records structured message output'
+
+            $firstLogFile = $currentLogFile
+            for ($i = 0; $i -lt 5; $i++) {
+                Start-Sleep -Milliseconds 15
+                Initialize-SetupLogging | Out-Null
+            }
+
+            $retainedLogs = Get-ChildItem -Path $logTestRoot -Filter 'setup-*.log' -File -ErrorAction Stop
+            Assert-True -Condition ($retainedLogs.Count -le 3) -Message 'Log retention enforces maximum file count'
+            Assert-True -Condition (-not ($retainedLogs.FullName -contains $firstLogFile)) -Message 'Oldest log removed when retention exceeded'
+
+            $explicitLogFile = Join-Path $logTestRoot 'custom.log'
+            $LogPath = $explicitLogFile
+            Reset-SetupLogging
+            Initialize-SetupLogging | Out-Null
+            $resolvedExplicitPath = Get-SetupLogFilePath
+            $explicitItem = Resolve-Path -LiteralPath $explicitLogFile -ErrorAction Stop
+            Assert-Equal -Expected $explicitItem.Path -Actual $resolvedExplicitPath -Message 'Explicit log file path respected'
+            Assert-True -Condition (Test-Path $explicitLogFile) -Message 'Explicit log file created'
+        } catch {
+            Write-TestWarning "Setup logging test failed: $($_.Exception.Message)"
+            throw
+        } finally {
+            $EnableLogs = $false
+            $LogPath = $null
+            if ($null -ne $originalRetentionValue) {
+                Set-SetupLogRetentionCount -Value $originalRetentionValue | Out-Null
+            } else {
+                Set-SetupLogRetentionCount -Value 5 | Out-Null
+            }
+            Reset-SetupLogging
+
+            if ($logTestRoot -and (Test-Path $logTestRoot)) {
+                Remove-Item -Path $logTestRoot -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
     } catch {
         Assert-True -Condition $false -Message "Dependencies configuration is valid: $($_.Exception.Message)"
     }
@@ -279,6 +453,81 @@ function Test-ModuleStructure {
             Assert-True -Condition $false -Message "$ModuleName module syntax is valid: $($_.Exception.Message)"
             return $false
         }
+    }
+}
+
+function Test-CommonUtilities {
+    Write-Host "`n=== Testing Common Utilities ===" -ForegroundColor Yellow
+
+    $commonModulePath = Join-Path $PSScriptRoot '..\Modules\Common\PowerShellMagic.Common.psd1'
+    Import-Module $commonModulePath -Force
+
+    $commonTestRoot = Join-Path $PSScriptRoot '..\TestArtifacts\Common'
+    if (Test-Path $commonTestRoot) {
+        Remove-Item -Path $commonTestRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    New-Item -ItemType Directory -Path $commonTestRoot -Force | Out-Null
+
+    $previousXdg = $env:XDG_CONFIG_HOME
+    $env:XDG_CONFIG_HOME = $commonTestRoot
+
+    try {
+        $configPath = Get-PSMagicConfigPath -Component 'shared' -FileName 'config.json'
+        $expectedDirectory = Join-Path $commonTestRoot 'shared'
+
+        Assert-Equal -Expected $expectedDirectory -Actual (Split-Path $configPath -Parent) -Message 'Config helper builds component directory path'
+        Assert-Equal -Expected (Join-Path $expectedDirectory 'config.json') -Actual $configPath -Message 'Config helper returns expected file path'
+
+        $returnedDirectory = Get-PSMagicConfigPath -Component 'shared' -ReturnDirectory
+        Assert-Equal -Expected $expectedDirectory -Actual $returnedDirectory -Message 'Config helper returns directory when requested'
+        Assert-True -Condition (Test-Path $expectedDirectory) -Message 'Config helper creates component directory'
+
+        $originalHashtable = @{
+            Name = 'Example'
+            Nested = @{
+                Value = 42
+            }
+        }
+
+        $copiedHashtable = Copy-PSMagicHashtable -InputObject $originalHashtable
+        Assert-True -Condition ($copiedHashtable -is [hashtable]) -Message 'Hashtable clone returns hashtable'
+
+        $copiedHashtable.Nested.Value = 100
+        Assert-Equal -Expected 42 -Actual $originalHashtable.Nested.Value -Message 'Hashtable clone performs deep copy'
+    } finally {
+        if ($null -ne $previousXdg) {
+            $env:XDG_CONFIG_HOME = $previousXdg
+        } else {
+            Remove-Item Env:\XDG_CONFIG_HOME -ErrorAction SilentlyContinue
+        }
+    }
+
+    $previousNonInteractive = Get-Item Env:POWERSHELL_MAGIC_NON_INTERACTIVE -ErrorAction SilentlyContinue
+    try {
+        $env:POWERSHELL_MAGIC_NON_INTERACTIVE = '1'
+        Assert-True -Condition (Test-PSMagicNonInteractive) -Message 'Non-interactive detection accepts value 1'
+
+        $env:POWERSHELL_MAGIC_NON_INTERACTIVE = 'on'
+        Assert-True -Condition (Test-PSMagicNonInteractive) -Message 'Non-interactive detection accepts value on'
+
+        $env:POWERSHELL_MAGIC_NON_INTERACTIVE = '0'
+        Assert-True -Condition (-not (Test-PSMagicNonInteractive)) -Message 'Non-interactive detection ignores value 0'
+
+        Remove-Item Env:\POWERSHELL_MAGIC_NON_INTERACTIVE -ErrorAction SilentlyContinue
+        Assert-True -Condition (-not (Test-PSMagicNonInteractive)) -Message 'Non-interactive detection returns false when unset'
+    } finally {
+        if ($previousNonInteractive) {
+            $env:POWERSHELL_MAGIC_NON_INTERACTIVE = $previousNonInteractive.Value
+        } else {
+            Remove-Item Env:\POWERSHELL_MAGIC_NON_INTERACTIVE -ErrorAction SilentlyContinue
+        }
+    }
+
+    $fzfResult = Test-FzfAvailable
+    Assert-True -Condition ($fzfResult -is [bool]) -Message 'Test-FzfAvailable returns a boolean result'
+
+    if (Test-Path $commonTestRoot) {
+        Remove-Item -Path $commonTestRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -444,6 +693,121 @@ function Test-Templater {
                 $Script:TestResults.Passed++
             } catch {
                 Write-TestWarning "Templater dependency handling: $($_.Exception.Message)"
+            }
+
+            # Fallback selection without fzf using Read-Host
+            try {
+                $templaterFallbackRoot = Join-Path $templaterTestRoot 'Fallback'
+                if (Test-Path $templaterFallbackRoot) {
+                    Remove-Item -Path $templaterFallbackRoot -Recurse -Force -ErrorAction SilentlyContinue
+                }
+                New-Item -ItemType Directory -Path $templaterFallbackRoot -Force | Out-Null
+
+                $configRoot = Join-Path $templaterFallbackRoot 'config'
+                New-Item -ItemType Directory -Path $configRoot -Force | Out-Null
+
+                $templateSource = Join-Path $templaterFallbackRoot 'template'
+                if (Test-Path $templateSource) {
+                    Remove-Item -Path $templateSource -Recurse -Force -ErrorAction SilentlyContinue
+                }
+                New-Item -ItemType Directory -Path $templateSource -Force | Out-Null
+                Set-Content -Path (Join-Path $templateSource 'sample.txt') -Value 'fallback content' -Encoding UTF8 -Force
+
+                $deployPath = Join-Path $templaterFallbackRoot 'deploy'
+                if (Test-Path $deployPath) {
+                    Remove-Item -Path $deployPath -Recurse -Force -ErrorAction SilentlyContinue
+                }
+                New-Item -ItemType Directory -Path $deployPath -Force | Out-Null
+
+                $fallbackScript = Join-Path $templaterFallbackRoot 'InvokeFallback.ps1'
+                $scriptContent = @'
+param(
+    [string]\$ModulePath,
+    [string]\$ConfigRoot,
+    [string]\$TemplateSource,
+    [string]\$DeployPath
+)
+Import-Module \$ModulePath -Force
+Remove-Item Env:POWERSHELL_MAGIC_NON_INTERACTIVE -ErrorAction SilentlyContinue
+\$env:XDG_CONFIG_HOME = \$ConfigRoot
+New-Item -ItemType Directory -Path \$env:XDG_CONFIG_HOME -Force | Out-Null
+Set-Item Function:Test-FzfAvailable -Value ([ScriptBlock]::Create('return \$false')) -Force
+Set-Item Function:Read-Host -Value ([ScriptBlock]::Create('param(`$Prompt) return \"1\"')) -Force
+\$alias = 'fallback-templater'
+Add-Template -Alias \$alias -Path \$TemplateSource -Description 'Fallback test template' -Category 'tests' -Type 'Folder' -Force | Out-Null
+Get-Templates -Interactive -DestinationPath \$DeployPath | Out-Null
+if (Test-Path (Join-Path \$DeployPath 'sample.txt')) { Write-Output 'SUCCESS' } else { Write-Output 'FAILED' }
+'@
+                Set-Content -Path $fallbackScript -Value $scriptContent -Encoding UTF8
+
+                $modulePathNormalized = Join-Path $PSScriptRoot '..\Modules\Templater'
+                $result = & pwsh -NoLogo -NoProfile -File $fallbackScript -ModulePath $modulePathNormalized -ConfigRoot $configRoot -TemplateSource $templateSource -DeployPath $deployPath 2>$null
+                $resultValue = ($result | Select-Object -Last 1).Trim()
+                Assert-Equal -Expected 'SUCCESS' -Actual $resultValue -Message 'Templater fallback interactive selection succeeds without fzf'
+                Assert-True -Condition (Test-Path (Join-Path $deployPath 'sample.txt')) -Message 'Templater fallback deployed template content'
+            } catch {
+                Write-TestWarning "Templater fallback selection: $($_.Exception.Message)"
+            } finally {
+                if ($fallbackScript -and (Test-Path $fallbackScript)) {
+                    Remove-Item -Path $fallbackScript -Force -ErrorAction SilentlyContinue
+                }
+            }
+
+            # Variable substitution and renaming
+            $variableTemplateAlias = $null
+            $previousVerbose = $VerbosePreference
+            try {
+                $variableRoot = Join-Path $templaterTestRoot 'Variables'
+                if (Test-Path $variableRoot) {
+                    Remove-Item -Path $variableRoot -Recurse -Force -ErrorAction SilentlyContinue
+                }
+                New-Item -ItemType Directory -Path $variableRoot -Force | Out-Null
+
+                $templateSource = Join-Path $variableRoot 'source'
+                New-Item -ItemType Directory -Path $templateSource -Force | Out-Null
+
+                $nestedDir = Join-Path $templateSource '{{ProjectName}}'
+                New-Item -ItemType Directory -Path $nestedDir -Force | Out-Null
+
+                $textFile = Join-Path $nestedDir '{{ProjectName}}-info.txt'
+                Set-Content -Path $textFile -Value "Project: {{ProjectName}}`nDescription: {{Description}}" -Encoding UTF8 -Force
+
+                $variableTemplateAlias = "templater-vars-$([System.Guid]::NewGuid().ToString('N').Substring(0, 8))"
+                Add-Template -Alias $variableTemplateAlias -Path $templateSource -Description 'Variable substitution template' -Category 'tests' -Type 'Folder' -Force | Out-Null
+
+                $deployPath = Join-Path $variableRoot 'deploy'
+                New-Item -ItemType Directory -Path $deployPath -Force | Out-Null
+
+                $variables = @{
+                    ProjectName = 'Alpha'
+                    Description = 'Sample project'
+                }
+
+                $VerbosePreference = 'Continue'
+                Use-Template -Alias $variableTemplateAlias -DestinationPath $deployPath -Variables $variables -SubfolderName '{{ProjectName}}-output' -ErrorAction Stop | Out-Null
+
+                $outputRoot = Join-Path $deployPath 'Alpha-output'
+                $renamedFolder = Join-Path $outputRoot 'Alpha'
+                Assert-True -Condition (Test-Path $renamedFolder) -Message 'Variable substitution renames directories using tokens'
+
+                $renamedFile = Join-Path $renamedFolder 'Alpha-info.txt'
+                Assert-True -Condition (Test-Path $renamedFile) -Message 'Variable substitution renames files using tokens'
+
+                $fileContent = Get-Content -Path $renamedFile -Raw -ErrorAction Stop
+                Assert-True -Condition ($fileContent -match 'Project: Alpha') -Message 'Variable substitution replaces project token in file content'
+                Assert-True -Condition ($fileContent -match 'Description: Sample project') -Message 'Variable substitution replaces additional tokens in file content'
+            } catch {
+                Write-TestWarning "Templater variable substitution: $($_.Exception.Message)"
+            } finally {
+                if ($null -ne $previousVerbose) {
+                    $VerbosePreference = $previousVerbose
+                }
+                if ($variableTemplateAlias) {
+                    Remove-Template -Alias $variableTemplateAlias -Force -ErrorAction SilentlyContinue
+                }
+                if ($variableRoot -and (Test-Path $variableRoot)) {
+                    Remove-Item -Path $variableRoot -Recurse -Force -ErrorAction SilentlyContinue
+                }
             }
 
             # Regression test: archive redeployment with Force
@@ -843,6 +1207,86 @@ function Test-Unitea {
             $pathResult = Get-UnityProjects -Alias $alias -Path
             Assert-Equal -Expected $resolvedProjectPath -Actual $pathResult -Message 'Get-UnityProjects -Alias -Path returns project path'
 
+            # Fallback interactive selection without fzf
+            try {
+                $uniteaFallbackRoot = Join-Path $uniteaTestRoot 'Fallback'
+                if (Test-Path $uniteaFallbackRoot) {
+                    Remove-Item -Path $uniteaFallbackRoot -Recurse -Force -ErrorAction SilentlyContinue
+                }
+                New-Item -ItemType Directory -Path $uniteaFallbackRoot -Force | Out-Null
+
+                $configRoot = Join-Path $uniteaFallbackRoot 'config'
+                New-Item -ItemType Directory -Path $configRoot -Force | Out-Null
+
+                $fallbackProject = Join-Path $uniteaFallbackRoot 'Project'
+                New-Item -ItemType Directory -Path $fallbackProject -Force | Out-Null
+                $fallbackSettings = Join-Path $fallbackProject 'ProjectSettings'
+                New-Item -ItemType Directory -Path $fallbackSettings -Force | Out-Null
+                Set-Content -Path (Join-Path $fallbackSettings 'ProjectVersion.txt') -Value 'm_EditorVersion: 2022.3.1f1' -Encoding UTF8
+
+                $fallbackScript = Join-Path $uniteaFallbackRoot 'InvokeFallback.ps1'
+                $scriptContent = @'
+param(
+    [string]$ModulePath,
+    [string]$ConfigRoot,
+    [string]$ProjectPath
+)
+Import-Module $ModulePath -Force
+Remove-Item Env:POWERSHELL_MAGIC_NON_INTERACTIVE -ErrorAction SilentlyContinue
+$env:XDG_CONFIG_HOME = $ConfigRoot
+New-Item -ItemType Directory -Path $env:XDG_CONFIG_HOME -Force | Out-Null
+Set-Item Function:Test-FzfAvailable -Value ([ScriptBlock]::Create('return $false')) -Force
+
+$script:readHostResponses = New-Object 'System.Collections.Generic.Queue[string]'
+$script:readHostResponses.Enqueue('1')
+$script:readHostResponses.Enqueue('1')
+$script:readHostResponses.Enqueue('y')
+
+Set-Item Function:Read-Host -Value {
+    param($Prompt)
+    if ($script:readHostResponses.Count -gt 0) {
+        return $script:readHostResponses.Dequeue()
+    }
+    return ''
+} -Force
+
+$alias = 'fallback-unitea'
+Add-UnityProject -Alias $alias -ProjectPath $ProjectPath -Force | Out-Null
+
+$selectedPath = Get-UnityProjects -Interactive -Path
+if ($selectedPath -and (Test-Path $selectedPath)) {
+    Write-Output 'SELECT_SUCCESS'
+} else {
+    Write-Output 'SELECT_FAILED'
+}
+
+Remove-UnityProject -Interactive -Multiple | Out-Null
+
+$remaining = Get-UnityProjects
+if (@($remaining).Count -eq 0) {
+    Write-Output 'REMOVE_SUCCESS'
+} else {
+    Write-Output 'REMOVE_FAILED'
+}
+'@
+                Set-Content -Path $fallbackScript -Value $scriptContent -Encoding UTF8
+
+                $modulePathNormalized = Join-Path $PSScriptRoot '..\Modules\Unitea'
+                $result = & pwsh -NoLogo -NoProfile -File $fallbackScript -ModulePath $modulePathNormalized -ConfigRoot $configRoot -ProjectPath $fallbackProject 2>$null
+                $resultTokens = @($result | Where-Object { $_ })
+                Assert-True -Condition ($resultTokens -contains 'SELECT_SUCCESS') -Message 'Unitea fallback interactive selection returns project path without fzf'
+                Assert-True -Condition ($resultTokens -contains 'REMOVE_SUCCESS') -Message 'Unitea fallback removal succeeds without fzf'
+            } catch {
+                Write-TestWarning "Unitea fallback selection: $($_.Exception.Message)"
+            } finally {
+                if ($fallbackScript -and (Test-Path $fallbackScript)) {
+                    Remove-Item -Path $fallbackScript -Force -ErrorAction SilentlyContinue
+                }
+                if (Test-Path $uniteaFallbackRoot) {
+                    Remove-Item -Path $uniteaFallbackRoot -Recurse -Force -ErrorAction SilentlyContinue
+                }
+            }
+
             # Warn when stored metadata is stale
             $previousNonInteractive = $env:POWERSHELL_MAGIC_NON_INTERACTIVE
             $env:POWERSHELL_MAGIC_NON_INTERACTIVE = '1'
@@ -1149,11 +1593,13 @@ function Main {
     # Run tests based on parameter
     switch ($TestName) {
         'Setup' { Test-Setup }
+        'Common' { Test-CommonUtilities }
         'QuickJump' { Test-QuickJump }
         'Templater' { Test-Templater }
         'Unitea' { Test-Unitea }
         'All' {
             Test-Setup
+            Test-CommonUtilities
             Test-QuickJump
             Test-Templater
             Test-Unitea

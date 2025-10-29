@@ -4,7 +4,7 @@
     GUID = 'a1b2d3d4-e55f-7890-1234-567890abcdef'
     Author = 'Jason Storey'
     Description = 'Register and Restore Templates'
-    PowerShellVersion = '5.1'
+    PowerShellVersion = '7.0'
 
     # Functions to export from this module
     FunctionsToExport = @(
@@ -40,7 +40,7 @@
         PSData = @{
             Tags = @('template', '7zip', 'workflow', 'fzf', 'starter', 'project')
             LicenseUri = 'https://opensource.org/licenses/MIT'
-            ProjectUri = 'https://github.com/yourname/Templater'
+            ProjectUri = 'https://github.com/wallstop/jason-storey-powershell-magic'
             ReleaseNotes = 'Initial public release - 2024-06'
         }
     }
