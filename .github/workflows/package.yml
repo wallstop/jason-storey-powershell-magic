@@ -37,7 +37,7 @@ jobs:
         run: pwsh -NoProfile -File .\Scripts\Test-BuildArtifacts.ps1 -MetadataPath "$env:BUILD_OUTPUT_DIR/packages/module-metadata.json" -PackageRoot "$env:BUILD_OUTPUT_DIR/packages"
 
       - name: Upload packages
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: module-packages
           path: |
