@@ -121,7 +121,7 @@ if ($config.CodeCoverage.Enabled -and $result.CodeCoverage) {
     # Show missed commands
     if ($coverage.MissedCommands.Count -gt 0) {
         Write-Host ''
-        Write-Host "Missed Commands (top 10):" -ForegroundColor Yellow
+        Write-Host 'Missed Commands (top 10):' -ForegroundColor Yellow
         $coverage.MissedCommands | Select-Object -First 10 | ForEach-Object {
             Write-Host "  $($_.File):$($_.Line) - $($_.Command)" -ForegroundColor Gray
         }
