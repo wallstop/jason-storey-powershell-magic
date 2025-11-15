@@ -23,6 +23,13 @@ jobs:
         Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
         Write-Host "OS Version: $($PSVersionTable.OS)"
 
+    - name: Install Pester
+      run: |
+        Write-Host "Installing Pester 5.x for testing..." -ForegroundColor Cyan
+        Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -SkipPublisherCheck -Scope CurrentUser
+        $pester = Get-Module -Name Pester -ListAvailable | Select-Object -First 1
+        Write-Host "Installed Pester version: $($pester.Version)" -ForegroundColor Green
+
     - name: Run formatting checks
       run: |
         Write-Host "Running PowerShell formatting checks..." -ForegroundColor Cyan
@@ -60,6 +67,15 @@ jobs:
           exit $LASTEXITCODE
         }
 
+    - name: Run Pester tests with code coverage
+      run: |
+        Write-Host "Running Pester test suite with code coverage..." -ForegroundColor Cyan
+        .\Invoke-PesterTests.ps1 -CI -CoverageThreshold 52
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Pester tests failed"
+          exit $LASTEXITCODE
+        }
+
     - name: Upload test results
       if: always()
       uses: actions/upload-artifact@v5
@@ -69,6 +85,16 @@ jobs:
           **/*.log
           **/*.xml
         retention-days: 7
+
+    - name: Upload code coverage
+      if: always()
+      uses: actions/upload-artifact@v5
+      with:
+        name: code-coverage
+        path: |
+          Tests/Pester/coverage.xml
+          Tests/Pester/testResults.xml
+        retention-days: 30
 
   validate-modules:
     name: Validate PowerShell Modules
@@ -204,6 +230,13 @@ jobs:
       run: |
         Write-Host "Operating System: $($PSVersionTable.OS)" -ForegroundColor Cyan
         Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)" -ForegroundColor Cyan
+
+    - name: Install Pester
+      run: |
+        Write-Host "Installing Pester 5.x..." -ForegroundColor Cyan
+        Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -SkipPublisherCheck -Scope CurrentUser
+        $pester = Get-Module -Name Pester -ListAvailable | Select-Object -First 1
+        Write-Host "Installed Pester version: $($pester.Version)" -ForegroundColor Green
 
     - name: Run unit tests
       run: |

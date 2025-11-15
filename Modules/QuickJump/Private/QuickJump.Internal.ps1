@@ -17,6 +17,70 @@ function Copy-QuickJumpConfig {
     return Copy-PSMagicHashtable -InputObject $Config
 }
 
+function Get-QuickJumpConfigLockName {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ConfigPath
+    )
+
+    $normalizedPath = try {
+        [System.IO.Path]::GetFullPath($ConfigPath).ToLowerInvariant()
+    } catch {
+        $ConfigPath.ToLowerInvariant()
+    }
+
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($normalizedPath)
+        $hashBytes = $sha.ComputeHash($bytes)
+    } finally {
+        $sha.Dispose()
+    }
+
+    $hash = [System.BitConverter]::ToString($hashBytes).Replace('-', '')
+    return "PSMagicQuickJump_$hash"
+}
+
+function Invoke-QuickJumpConfigLock {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ConfigPath,
+
+        [Parameter(Mandatory = $true)]
+        [scriptblock]$ScriptBlock
+    )
+
+    $mutexName = Get-QuickJumpConfigLockName -ConfigPath $ConfigPath
+    $mutex = $null
+    $hasHandle = $false
+
+    try {
+        $mutex = New-Object System.Threading.Mutex($false, $mutexName)
+        try {
+            $hasHandle = $mutex.WaitOne([TimeSpan]::FromSeconds(15))
+        } catch [System.Threading.AbandonedMutexException] {
+            $hasHandle = $true
+        }
+
+        if (-not $hasHandle) {
+            throw "Timeout acquiring QuickJump configuration lock for '$ConfigPath'."
+        }
+
+        return & $ScriptBlock
+    } finally {
+        if ($mutex) {
+            if ($hasHandle) {
+                try {
+                    $mutex.ReleaseMutex() | Out-Null
+                } catch {
+                    # Ignore release failures
+                }
+            }
+            $mutex.Dispose()
+        }
+    }
+}
+
 function ConvertTo-QuickJumpRecord {
     param(
         [hashtable]$Entry
@@ -95,57 +159,57 @@ function Get-QuickJumpConfigPath {
 
 function Get-QuickJumpConfig {
     $configPath = Get-QuickJumpConfigPath
-    if (Test-Path $configPath) {
-        try {
-            $fileInfo = Get-Item $configPath -ErrorAction Stop
 
-            if ($script:QuickJumpConfigCache -ne $null -and
-                $script:QuickJumpConfigTimestamp -eq $fileInfo.LastWriteTimeUtc) {
-                return Copy-QuickJumpConfig -Config $script:QuickJumpConfigCache
+    # Use the new caching system with FileSystemWatcher
+    try {
+        $config = Get-PSMagicCachedConfig -CacheKey 'quickjump' -ConfigPath $configPath -LoadScriptBlock {
+            Invoke-QuickJumpConfigLock -ConfigPath $configPath -ScriptBlock {
+                if (Test-Path $configPath) {
+                    try {
+                        $loadedConfig = Get-Content $configPath -Raw -ErrorAction Stop |
+                            ConvertFrom-Json -AsHashtable -ErrorAction Stop
+
+                        if (-not $loadedConfig) {
+                            $loadedConfig = New-QuickJumpConfig
+                        }
+
+                        if (-not $loadedConfig.ContainsKey('paths') -or -not $loadedConfig.paths) {
+                            $loadedConfig.paths = @()
+                        }
+
+                        return $loadedConfig
+                    } catch {
+                        Write-Warning "QuickJump configuration at '$configPath' is invalid: $($_.Exception.Message)"
+                        $timestamp = Get-Date -Format 'yyyyMMddTHHmmss'
+                        $backupPath = "$configPath.backup.$timestamp"
+
+                        try {
+                            Copy-Item $configPath $backupPath -Force
+                            Write-Warning "Backup created at: $backupPath"
+                        } catch {
+                            Write-Warning "Failed to create backup for corrupt QuickJump configuration: $($_.Exception.Message)"
+                        }
+
+                        $resetConfig = New-QuickJumpConfig
+                        try {
+                            Save-QuickJumpConfig -Config $resetConfig
+                        } catch {
+                            Write-Warning "Failed to reset QuickJump configuration: $($_.Exception.Message)"
+                        }
+
+                        return $resetConfig
+                    }
+                } else {
+                    return New-QuickJumpConfig
+                }
             }
-
-            $config = Get-Content $configPath -Raw -ErrorAction Stop |
-                ConvertFrom-Json -AsHashtable -ErrorAction Stop
-
-            if (-not $config) {
-                $config = New-QuickJumpConfig
-            }
-
-            if (-not $config.ContainsKey('paths') -or -not $config.paths) {
-                $config.paths = @()
-            }
-
-            $script:QuickJumpConfigCache = Copy-QuickJumpConfig -Config $config
-            $script:QuickJumpConfigTimestamp = $fileInfo.LastWriteTimeUtc
-
-            return Copy-QuickJumpConfig -Config $config
-        } catch {
-            Write-Warning "QuickJump configuration at '$configPath' is invalid: $($_.Exception.Message)"
-            $timestamp = Get-Date -Format 'yyyyMMddTHHmmss'
-            $backupPath = "$configPath.backup.$timestamp"
-
-            try {
-                Copy-Item $configPath $backupPath -Force
-                Write-Warning "Backup created at: $backupPath"
-            } catch {
-                Write-Warning "Failed to create backup for corrupt QuickJump configuration: $($_.Exception.Message)"
-            }
-
-            $resetConfig = New-QuickJumpConfig
-            try {
-                Save-QuickJumpConfig -Config $resetConfig
-            } catch {
-                Write-Warning "Failed to reset QuickJump configuration: $($_.Exception.Message)"
-            }
-
-            return Copy-QuickJumpConfig -Config $resetConfig
         }
-    }
 
-    $config = New-QuickJumpConfig
-    $script:QuickJumpConfigCache = Copy-QuickJumpConfig -Config $config
-    $script:QuickJumpConfigTimestamp = $null
-    return Copy-QuickJumpConfig -Config $config
+        return Copy-QuickJumpConfig -Config $config
+    } catch {
+        Write-Warning "Failed to load QuickJump config: $($_.Exception.Message)"
+        return New-QuickJumpConfig
+    }
 }
 
 function Save-QuickJumpConfig {
@@ -154,11 +218,29 @@ function Save-QuickJumpConfig {
     $configPath = Get-QuickJumpConfigPath
 
     try {
-        $json = $Config | ConvertTo-Json -Depth 10
-        $json | Set-Content $configPath -Encoding UTF8
-        $fileInfo = Get-Item $configPath -ErrorAction Stop
-        $script:QuickJumpConfigCache = Copy-QuickJumpConfig -Config $Config
-        $script:QuickJumpConfigTimestamp = $fileInfo.LastWriteTimeUtc
+        $parentDir = Split-Path $configPath -Parent
+        if (-not (Test-Path -LiteralPath $parentDir)) {
+            New-Item -ItemType Directory -Path $parentDir -Force | Out-Null
+        }
+
+        Invoke-QuickJumpConfigLock -ConfigPath $configPath -ScriptBlock {
+            $json = $Config | ConvertTo-Json -Depth 10
+            $tempFile = [System.IO.Path]::GetTempFileName()
+            $encoding = New-Object System.Text.UTF8Encoding($false)
+
+            try {
+                [System.IO.File]::WriteAllText($tempFile, $json, $encoding)
+                Move-Item -LiteralPath $tempFile -Destination $configPath -Force
+            } finally {
+                if (Test-Path $tempFile) {
+                    Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue
+                }
+            }
+        }
+
+        # Clear the cache so it will be reloaded with new data
+        # FileSystemWatcher will automatically invalidate, but we also clear explicitly
+        Clear-PSMagicConfigCache -CacheKey 'quickjump'
     } catch {
         $message = "Failed to save QuickJump configuration to '$configPath'. $($_.Exception.Message)"
         throw (New-Object System.Exception($message, $_.Exception))

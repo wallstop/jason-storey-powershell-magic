@@ -26,8 +26,8 @@ improvement plan.
 - Adopt semantic versioning across the repo (`MAJOR.MINOR.PATCH`). Begin with
   `1.1.0` once the packaging pipeline lands, reserving `1.0.x` for pre-gallery
   builds.
-- Maintain a single version constant in `build/version.json` (todo) and sync
-  PowerShell manifests (`*.psd1`) via automation so releases stay consistent.
+- Maintain a single version constant in `build/version.json` and sync PowerShell
+  manifests (`*.psd1`) via automation so releases stay consistent.
 - Increment `PATCH` for bug fixes and doc-only tweaks; bump `MINOR` when
   user-facing functionality ships; bump `MAJOR` only when compatibility breaks.
 - Tag releases as `vMAJOR.MINOR.PATCH` in git. CI uses the tag to determine the
@@ -135,8 +135,8 @@ improvement plan.
 
 ## ✅ Checklist Before Publishing
 
-- [ ] Update `build/version.json` with new version (todo).
-- [ ] Mention new features/fixes in `CHANGELOG.md` (todo).
+- [ ] Update `build/version.json` with new version.
+- [ ] Mention new features/fixes in `CHANGELOG.md`.
 - [ ] Ensure module manifests include updated metadata (automated check will
       fail otherwise).
 - [ ] Confirm README/DEVELOPMENT docs reference the new release if workflows
