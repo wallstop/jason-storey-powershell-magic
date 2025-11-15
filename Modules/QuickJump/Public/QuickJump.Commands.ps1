@@ -63,28 +63,42 @@ function Add-QuickJumpPath {
         $config = Get-QuickJumpConfig
         $pathStr = $resolvedPath.Path
 
-        # Check if path already exists
-        $existingEntry = $config.paths | Where-Object { $_.path -eq $pathStr }
-        if ($existingEntry -and -not $Force) {
-            Write-Host "Existing entry: Alias='$($existingEntry.alias)', Category='$($existingEntry.category)'" -ForegroundColor Yellow
-            throw "Path '$pathStr' already exists. Use -Force to update, or use a different path."
+        $existingAliasEntry = $null
+        if ($Alias) {
+            $existingAliasEntry = $config.paths | Where-Object { $_.alias -eq $Alias } | Select-Object -First 1
+            if ($existingAliasEntry -and -not $Force) {
+                Write-Host "Existing path: $($existingAliasEntry.path)" -ForegroundColor Yellow
+                throw "Alias '$Alias' already exists. Use -Force to overwrite, or choose a different alias."
+            }
         }
 
-        # Check if alias already exists for a different path
-        if ($Alias) {
-            $existingAlias = $config.paths | Where-Object { $_.alias -eq $Alias -and $_.path -ne $pathStr }
-            if ($existingAlias -and -not $Force) {
-                Write-Host "Existing path: $($existingAlias.path)" -ForegroundColor Yellow
-                throw "Alias '$Alias' already exists for a different path. Use -Force to overwrite, or choose a different alias."
+        $existingPathEntries = $config.paths | Where-Object { $_.path -eq $pathStr }
+        if (-not $Alias -and $existingPathEntries -and -not $Force) {
+            $aliasList = $existingPathEntries | Where-Object { $_.alias } | Select-Object -ExpandProperty alias
+            if ($aliasList) {
+                Write-Host "Existing aliases for this path: $($aliasList -join ', ')" -ForegroundColor Yellow
+            } else {
+                Write-Host 'Path already tracked without an alias.' -ForegroundColor Yellow
             }
+            throw "Path '$pathStr' already exists. Use -Force to update the existing entry."
         }
 
         $currentTime = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
 
-        if ($existingEntry) {
-            # Update existing entry
-            $existingEntry.alias = $Alias
-            $existingEntry.category = $Category
+        if ($existingAliasEntry) {
+            # Update existing alias entry (when -Force supplied)
+            $existingAliasEntry.path = $pathStr
+            $existingAliasEntry.category = $Category
+            if (-not $existingAliasEntry.added) {
+                $existingAliasEntry.added = $currentTime
+            }
+            if ($null -eq $existingAliasEntry.useCount) {
+                $existingAliasEntry.useCount = 0
+            }
+            Write-Host "Updated path entry: $pathStr" -ForegroundColor Green
+        } elseif (-not $Alias -and $existingPathEntries -and $Force) {
+            $entryToUpdate = $existingPathEntries | Select-Object -First 1
+            $entryToUpdate.category = $Category
             Write-Host "Updated path entry: $pathStr" -ForegroundColor Green
         } else {
             # Add new entry
@@ -158,7 +172,57 @@ function Remove-QuickJumpPath {
     $config = Get-QuickJumpConfig
 
     if ($config.paths.Count -eq 0) {
+        if ($Alias -or $Path) {
+            throw 'No QuickJump paths are currently saved.'
+        }
+
         Write-Host 'No paths saved.' -ForegroundColor Yellow
+        return
+    }
+
+    if (-not $Interactive -and -not $Multiple -and ($Path -or $Alias)) {
+        $entryToRemove = $null
+
+        if ($Alias) {
+            $entryToRemove = $config.paths | Where-Object { $_.alias -eq $Alias }
+            if (-not $entryToRemove) {
+                $availableAliases = $config.paths | Where-Object { $_.alias } | Select-Object -ExpandProperty alias
+                if ($availableAliases) {
+                    Write-Host "Available aliases: $($availableAliases -join ', ')" -ForegroundColor Yellow
+                }
+                throw "No path found with alias '$Alias'"
+            }
+        } elseif ($Path) {
+            try {
+                $resolvedPath = Resolve-Path $Path -ErrorAction Stop
+                $entryToRemove = $config.paths | Where-Object { $_.path -eq $resolvedPath.Path }
+            } catch {
+                $entryToRemove = $config.paths | Where-Object { $_.path -eq $Path }
+            }
+
+            if (-not $entryToRemove) {
+                throw "No saved path found matching '$Path'"
+            }
+        }
+
+        if ($entryToRemove) {
+            $displayAlias = if ($entryToRemove.alias) { " (Alias: $($entryToRemove.alias))" } else { '' }
+            $displayCategory = if ($entryToRemove.category) { " [$($entryToRemove.category)]" } else { '' }
+
+            if ($PSCmdlet.ShouldProcess("QuickJump path '$($entryToRemove.path)'$displayAlias$displayCategory", 'Remove from saved paths')) {
+                $config.paths = @($config.paths | Where-Object { $_ -ne $entryToRemove })
+                Save-QuickJumpConfig -Config $config
+
+                Write-Host "Removed path from QuickJump: $($entryToRemove.path)" -ForegroundColor Green
+                if ($entryToRemove.alias) {
+                    Write-Host "  Alias was: $($entryToRemove.alias)" -ForegroundColor Gray
+                }
+                if ($entryToRemove.category) {
+                    Write-Host "  Category was: $($entryToRemove.category)" -ForegroundColor Gray
+                }
+            }
+        }
+
         return
     }
 
@@ -284,7 +348,7 @@ function Remove-QuickJumpPath {
                     Write-Host 'Removal cancelled.' -ForegroundColor Yellow
                 }
                 return
-            } else {
+            } elseif (-not $Alias -and -not $Path) {
                 $selectedRecord = Invoke-QuickJumpFallbackSelection -Records $sortedRecords -Header 'Select path to remove:'
                 if (-not $selectedRecord) {
                     return
@@ -298,50 +362,6 @@ function Remove-QuickJumpPath {
             }
         }
 
-        # Handle single removal (either from parameters or interactive single selection)
-        if (-not $Multiple -and ($Path -or $Alias)) {
-            $entryToRemove = $null
-
-            if ($Alias) {
-                $entryToRemove = $config.paths | Where-Object { $_.alias -eq $Alias }
-                if (-not $entryToRemove) {
-                    $availableAliases = $config.paths | Where-Object { $_.alias } | Select-Object -ExpandProperty alias
-                    if ($availableAliases) {
-                        Write-Host "Available aliases: $($availableAliases -join ', ')" -ForegroundColor Yellow
-                    }
-                    throw "No path found with alias '$Alias'"
-                }
-            } elseif ($Path) {
-                try {
-                    $resolvedPath = Resolve-Path $Path -ErrorAction Stop
-                    $entryToRemove = $config.paths | Where-Object { $_.path -eq $resolvedPath.Path }
-                } catch {
-                    $entryToRemove = $config.paths | Where-Object { $_.path -eq $Path }
-                }
-
-                if (-not $entryToRemove) {
-                    throw "No saved path found matching '$Path'"
-                }
-            }
-
-            if ($entryToRemove) {
-                $displayAlias = if ($entryToRemove.alias) { " (Alias: $($entryToRemove.alias))" } else { '' }
-                $displayCategory = if ($entryToRemove.category) { " [$($entryToRemove.category)]" } else { '' }
-
-                if ($PSCmdlet.ShouldProcess("QuickJump path '$($entryToRemove.path)'$displayAlias$displayCategory", 'Remove from saved paths')) {
-                    $config.paths = @($config.paths | Where-Object { $_ -ne $entryToRemove })
-                    Save-QuickJumpConfig -Config $config
-
-                    Write-Host "Removed path from QuickJump: $($entryToRemove.path)" -ForegroundColor Green
-                    if ($entryToRemove.alias) {
-                        Write-Host "  Alias was: $($entryToRemove.alias)" -ForegroundColor Gray
-                    }
-                    if ($entryToRemove.category) {
-                        Write-Host "  Category was: $($entryToRemove.category)" -ForegroundColor Gray
-                    }
-                }
-            }
-        }
     } elseif (-not $Interactive -and -not $Path -and -not $Alias) {
         Write-Error 'Specify -Path, -Alias, or use -Interactive flag.'
     }

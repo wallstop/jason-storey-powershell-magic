@@ -212,6 +212,9 @@ function Test-PSMagicRegexPerformance {
 
     Write-Host "Testing regex performance with $Iterations iterations..." -ForegroundColor Cyan
 
+    # Warm up JIT to reduce first-call overhead
+    $null = $TestString -match $Pattern
+
     # Test non-compiled regex
     $nonCompiledTime = Measure-Command {
         for ($i = 0; $i -lt $Iterations; $i++) {
@@ -221,6 +224,7 @@ function Test-PSMagicRegexPerformance {
 
     # Test compiled regex
     $compiledRegex = Get-PSMagicCompiledRegex -Pattern $Pattern
+    $null = $compiledRegex.IsMatch($TestString)
     $compiledTime = Measure-Command {
         for ($i = 0; $i -lt $Iterations; $i++) {
             $null = $compiledRegex.IsMatch($TestString)
