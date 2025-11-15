@@ -9,7 +9,22 @@
         'Get-PSMagicConfigPath',
         'Copy-PSMagicHashtable',
         'Test-FzfAvailable',
-        'Test-PSMagicNonInteractive'
+        'Test-PSMagicNonInteractive',
+        # Config caching functions
+        'Initialize-PSMagicConfigCache',
+        'Get-PSMagicCachedConfig',
+        'Clear-PSMagicConfigCache',
+        'Remove-PSMagicConfigCache',
+        # Compiled regex functions
+        'Get-PSMagicCompiledRegex',
+        'Clear-PSMagicCompiledRegexCache',
+        'Get-PSMagicCommonRegex',
+        'Test-PSMagicRegexPerformance',
+        # Help system functions
+        'Test-PSMagicHelpRequest',
+        'Show-PSMagicHelp',
+        'Add-PSMagicArgumentCompleter',
+        'Initialize-PSMagicHelpSystem'
     )
     AliasesToExport = @()
     PrivateData = @{
