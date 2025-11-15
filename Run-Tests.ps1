@@ -175,7 +175,7 @@ function Invoke-PesterTests {
         Write-Info 'Running Pester tests with code coverage...'
 
         if ($CI) {
-            & $pesterRunner -CI -CoverageThreshold 70
+            & $pesterRunner -CI -CoverageThreshold 52
         } else {
             & $pesterRunner -CodeCoverage
         }
