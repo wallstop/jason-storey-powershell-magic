@@ -1,6 +1,14 @@
 # PowerShellMagic.Common.psm1
 # Shared helpers for PowerShell Magic modules.
 
+# Dot-source private functions
+$privatePath = Join-Path $PSScriptRoot 'Private'
+if (Test-Path $privatePath) {
+    Get-ChildItem -Path $privatePath -Filter '*.ps1' -Recurse | ForEach-Object {
+        . $_.FullName
+    }
+}
+
 function Get-PSMagicConfigRoot {
     if ($env:XDG_CONFIG_HOME) {
         return $env:XDG_CONFIG_HOME
@@ -135,5 +143,20 @@ Export-ModuleMember -Function @(
     'Get-PSMagicConfigPath',
     'Copy-PSMagicHashtable',
     'Test-FzfAvailable',
-    'Test-PSMagicNonInteractive'
+    'Test-PSMagicNonInteractive',
+    # Config caching functions
+    'Initialize-PSMagicConfigCache',
+    'Get-PSMagicCachedConfig',
+    'Clear-PSMagicConfigCache',
+    'Remove-PSMagicConfigCache',
+    # Compiled regex functions
+    'Get-PSMagicCompiledRegex',
+    'Clear-PSMagicCompiledRegexCache',
+    'Get-PSMagicCommonRegex',
+    'Test-PSMagicRegexPerformance',
+    # Help system functions
+    'Test-PSMagicHelpRequest',
+    'Show-PSMagicHelp',
+    'Add-PSMagicArgumentCompleter',
+    'Initialize-PSMagicHelpSystem'
 )

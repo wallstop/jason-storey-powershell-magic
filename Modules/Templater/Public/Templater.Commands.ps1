@@ -483,8 +483,8 @@ function Use-Template {
     )
 
     process {
+        # Validate template exists
         $templateData = Get-TemplateData
-
         if (-not $templateData.ContainsKey($Alias)) {
             Write-Error "No template found with alias '$Alias'"
             if ($templateData.Count -gt 0) {
@@ -494,9 +494,6 @@ function Use-Template {
         }
 
         $template = $templateData[$Alias]
-        $variableMap = ConvertTo-TemplaterVariableMap -Variables $Variables
-        $variableExtensions = if ($VariableExtensions) { $VariableExtensions } else { $script:TemplateVariableDefaultExtensions }
-        Write-Verbose "Variable map contains $($variableMap.Count) entries."
 
         # Validate template path still exists
         if (-not (Test-Path $template.Path)) {
@@ -505,122 +502,41 @@ function Use-Template {
             return
         }
 
-        # Determine final destination
-        $finalDestination = $DestinationPath
+        # Prepare variables
+        $variableMap = ConvertTo-TemplaterVariableMap -Variables $Variables
+        $variableExtensions = if ($VariableExtensions) { $VariableExtensions } else { $script:TemplateVariableDefaultExtensions }
+        Write-Verbose "Variable map contains $($variableMap.Count) entries."
 
-        if ($SubfolderName) {
-            $CreateSubfolder = $true
-            Write-Verbose "SubfolderName parameter received value '$SubfolderName'."
-            Write-Verbose "IsNullOrEmpty(SubfolderName) = $([string]::IsNullOrEmpty($SubfolderName))."
-            $resolvedSubfolder = if ($variableMap.Count -gt 0) {
-                Resolve-TemplaterTokens -Text $SubfolderName -VariableMap $variableMap
-            } else {
-                $SubfolderName
-            }
-            Write-Verbose "Resolved subfolder name to '$resolvedSubfolder'."
-            $finalDestination = Join-Path $DestinationPath $resolvedSubfolder
-        } elseif ($CreateSubfolder) {
-            $subfolder = if ($variableMap.Count -gt 0) {
-                Resolve-TemplaterTokens -Text $Alias -VariableMap $variableMap
-            } else {
-                $Alias
-            }
-            Write-Verbose "Using subfolder name '$subfolder' based on alias."
-            $finalDestination = Join-Path $DestinationPath $subfolder
-        }
+        # Resolve destination path (using modular function)
+        $finalDestination = Resolve-TemplateDestination `
+            -DestinationPath $DestinationPath `
+            -Alias $Alias `
+            -CreateSubfolder $CreateSubfolder `
+            -SubfolderName $SubfolderName `
+            -VariableMap $variableMap
 
-        # Create destination directory if needed
-        if (-not (Test-Path $finalDestination)) {
-            try {
-                New-Item -ItemType Directory -Path $finalDestination -Force | Out-Null
-                Write-Host "Created directory: $finalDestination" -ForegroundColor Green
-            } catch {
-                Write-Error "Failed to create destination directory: $finalDestination"
-                return
-            }
-        }
+        # Initialize destination (using modular function)
+        Initialize-TemplateDestination -DestinationPath $finalDestination
 
+        # Display deployment info
         Write-Host "Using template '$Alias': $($template.Description)" -ForegroundColor Green
         Write-Host "Template type: $($template.Type)" -ForegroundColor Gray
         Write-Host "Destination: $finalDestination" -ForegroundColor Cyan
 
         try {
-            $processingRoot = $finalDestination
-            $overwriteExisting = [bool]$Force
+            # Extract or copy template (using modular function)
+            $extractionResult = Invoke-TemplateExtraction `
+                -Template $template `
+                -DestinationPath $finalDestination `
+                -Force $Force
 
-            switch ($template.Type) {
-                'File' {
-                    # Extract archive
-                    $result = Extract-Archive -ArchivePath $template.Path -DestinationPath $finalDestination -Force:$Force
-                    if ($result) {
-                        $processingRoot = $result
-                    }
-                    Write-Host 'Template extracted successfully!' -ForegroundColor Green
-                }
-                'Folder' {
-                    # Copy folder contents with accurate progress tracking
-                    $allItems = Get-ChildItem -Path $template.Path -Recurse -Force
-                    $directories = @($allItems | Where-Object { $_.PSIsContainer })
-                    $files = @($allItems | Where-Object { -not $_.PSIsContainer })
-
-                    foreach ($directory in $directories) {
-                        $relativeDir = $directory.FullName.Substring($template.Path.Length + 1)
-                        $destDirPath = Join-Path $finalDestination $relativeDir
-                        if (-not (Test-Path $destDirPath)) {
-                            New-Item -ItemType Directory -Path $destDirPath -Force | Out-Null
-                        }
-                    }
-
-                    $totalFiles = $files.Count
-                    $copiedFiles = 0
-
-                    if ($totalFiles -gt 0) {
-                        Write-Host "Copying $totalFiles files..." -ForegroundColor Gray
-                    } else {
-                        Write-Host 'No files found to copy (only directory structure).' -ForegroundColor Yellow
-                    }
-
-                    foreach ($file in $files) {
-                        $relativePath = $file.FullName.Substring($template.Path.Length + 1)
-                        $destPath = Join-Path $finalDestination $relativePath
-
-                        $destDir = Split-Path $destPath -Parent
-                        if (-not (Test-Path $destDir)) {
-                            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-                        }
-
-                        if ((Test-Path $destPath) -and -not $Force) {
-                            $choice = Read-Host "File exists: $relativePath. Overwrite? (y/N/a for all)"
-                            if ($choice -match '^[Aa]') {
-                                $Force = $true
-                                $overwriteExisting = $true
-                            } elseif ($choice -notmatch '^[Yy]') {
-                                Write-Host "Skipping: $relativePath" -ForegroundColor Yellow
-                                continue
-                            }
-                        }
-
-                        try {
-                            [System.IO.File]::Copy($file.FullName, $destPath, $overwriteExisting)
-                            $copiedFiles++
-
-                            # Show progress for large operations
-                            if ($totalFiles -gt 50 -and ($copiedFiles % 10) -eq 0) {
-                                $percent = [math]::Round(($copiedFiles / $totalFiles) * 100)
-                                Write-Host "Progress: $copiedFiles/$totalFiles ($percent%)" -ForegroundColor Gray
-                            }
-                        } catch {
-                            Write-Warning "Failed to copy: $relativePath - $($_.Exception.Message)"
-                        }
-                    }
-
-                    Write-Host "Template copied successfully! ($copiedFiles files, $($directories.Count) directories)" -ForegroundColor Green
-                }
-            }
-
+            # Apply variable substitution if needed
             if ($variableMap.Count -gt 0) {
-                Write-Verbose "Applying template variables to '$processingRoot'."
-                Invoke-TemplaterVariableProcessing -RootPath $processingRoot -VariableMap $variableMap -Extensions $variableExtensions
+                Write-Verbose "Applying template variables to '$($extractionResult.ProcessingRoot)'."
+                Invoke-TemplaterVariableProcessing `
+                    -RootPath $extractionResult.ProcessingRoot `
+                    -VariableMap $variableMap `
+                    -Extensions $variableExtensions
             }
 
             # Update usage statistics

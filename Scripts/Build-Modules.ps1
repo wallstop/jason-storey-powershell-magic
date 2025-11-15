@@ -11,8 +11,8 @@ steps that the upcoming packaging pipeline must implement.
 
 .PARAMETER Version
 Overrides the module version written into manifests during packaging. When not
-specified, the script will attempt to read the planned `build/version.json`
-file (todo). If neither source exists, the script stops with guidance.
+specified, the script will read from `build/version.json` file. If neither
+source exists, the script stops with guidance.
 
 .PARAMETER OutputPath
 Directory used to stage artifacts (default: `out/packages`). It is created when
@@ -423,12 +423,25 @@ try {
     Write-Host ('Module metadata written to {0}' -f $metadataPath) -ForegroundColor Green
 
     Write-Host ''
-    Write-Host 'Next automation steps (todo):' -ForegroundColor Yellow
-    Write-Host '  1. Refine staging exclusions (docs/tests) and support binary assets if needed.' -ForegroundColor Gray
-    Write-Host '  2. Wire CI workflow to call this script (-Release) and publish when tags/secrets are present.' -ForegroundColor Gray
+    Write-Host 'Build Summary:' -ForegroundColor Cyan
+    foreach ($pkg in $packages) {
+        Write-Host "  ✓ $($pkg.Name) v$versionInfo.Version" -ForegroundColor Green
+        Write-Host "    Package: $($pkg.PackagePath)" -ForegroundColor Gray
+    }
 
-    if (-not $Release) {
-        Write-Host "`nTip: use -Release inside CI to enable publishing once secrets are wired." -ForegroundColor DarkGray
+    if ($Release) {
+        Write-Host ''
+        Write-Host 'Release mode is enabled. Next steps:' -ForegroundColor Yellow
+        Write-Host '  1. Validate packages with Scripts/Test-BuildArtifacts.ps1' -ForegroundColor Gray
+        Write-Host '  2. Publish to PowerShell Gallery (requires PSGALLERY_API_KEY)' -ForegroundColor Gray
+        Write-Host '  3. Create GitHub release with artifacts and changelog' -ForegroundColor Gray
+    } else {
+        Write-Host ''
+        Write-Host 'Local build complete. To prepare for release:' -ForegroundColor Yellow
+        Write-Host '  1. Update build/version.json with new version' -ForegroundColor Gray
+        Write-Host '  2. Update CHANGELOG.md with release notes' -ForegroundColor Gray
+        Write-Host '  3. Run: git tag v<VERSION> && git push origin v<VERSION>' -ForegroundColor Gray
+        Write-Host '  4. CI will automatically build and publish' -ForegroundColor Gray
     }
 } catch {
     Write-Error $_
