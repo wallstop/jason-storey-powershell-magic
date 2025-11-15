@@ -425,7 +425,7 @@ try {
     Write-Host ''
     Write-Host 'Build Summary:' -ForegroundColor Cyan
     foreach ($pkg in $packages) {
-        Write-Host "  ✓ $($pkg.Name) v$versionInfo.Version" -ForegroundColor Green
+        Write-Host "  ✓ $($pkg.Name) v$resolvedVersion" -ForegroundColor Green
         Write-Host "    Package: $($pkg.PackagePath)" -ForegroundColor Gray
     }
 
