@@ -226,10 +226,8 @@ function Remove-PSMagicConfigCache {
     }
 }
 
-# Clean up watchers on module removal
-$MyInvocation.MyCommand.ScriptBlock.Module.OnRemove = {
-    Remove-PSMagicConfigCache
-}
+# Note: FileSystemWatchers are automatically disposed when PowerShell session ends.
+# For manual cleanup, use: Remove-PSMagicConfigCache
 
 Export-ModuleMember -Function @(
     'Initialize-PSMagicConfigCache',
