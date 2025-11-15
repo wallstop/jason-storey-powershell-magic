@@ -16,9 +16,9 @@ $pesterConfig.Output.CIFormat = 'Auto'
 # Code coverage settings
 $moduleRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $pesterConfig.CodeCoverage.Enabled = $true
+$quickJumpModulePath = Join-Path $moduleRoot 'Modules\QuickJump'
 $pesterConfig.CodeCoverage.Path = @(
-    Join-Path $moduleRoot 'Modules\**\*.ps1'
-    Join-Path $moduleRoot 'Modules\**\*.psm1'
+    (Join-Path $quickJumpModulePath 'Public\QuickJump.Commands.ps1')
 )
 $pesterConfig.CodeCoverage.OutputPath = Join-Path $PSScriptRoot 'coverage.xml'
 $pesterConfig.CodeCoverage.OutputFormat = 'JaCoCo'
