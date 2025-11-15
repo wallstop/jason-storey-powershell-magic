@@ -2,7 +2,7 @@
 using namespace System.Collections.Generic
 
 $commonModulePath = Join-Path $PSScriptRoot '..\Common\PowerShellMagic.Common.psd1'
-Import-Module $commonModulePath -Force -ErrorAction Stop
+Import-Module $commonModulePath -Force -Global -ErrorAction Stop
 
 $script:UnityProjectsCache = $null
 $script:UnityProjectsTimestamp = $null
