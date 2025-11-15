@@ -194,10 +194,10 @@ function Test-PSMagicRegexPerformance {
     String to match against
 
     .PARAMETER Iterations
-    Number of iterations for the test (default: 10000)
+    Number of iterations for the test (default: 100000)
 
     .EXAMPLE
-    Test-PSMagicRegexPerformance -Pattern '^\d{4}-\d{2}-\d{2}$' -TestString '2025-01-15' -Iterations 10000
+    Test-PSMagicRegexPerformance -Pattern '^\d{4}-\d{2}-\d{2}$' -TestString '2025-01-15' -Iterations 100000
     #>
     [CmdletBinding()]
     param(
@@ -207,7 +207,7 @@ function Test-PSMagicRegexPerformance {
         [Parameter(Mandatory = $true)]
         [string]$TestString,
 
-        [int]$Iterations = 10000
+        [int]$Iterations = 100000
     )
 
     Write-Host "Testing regex performance with $Iterations iterations..." -ForegroundColor Cyan

@@ -66,18 +66,16 @@ function Add-QuickJumpPath {
         # Check if path already exists
         $existingEntry = $config.paths | Where-Object { $_.path -eq $pathStr }
         if ($existingEntry -and -not $Force) {
-            Write-Error "Path '$pathStr' already exists. Use -Force to update, or use a different path."
             Write-Host "Existing entry: Alias='$($existingEntry.alias)', Category='$($existingEntry.category)'" -ForegroundColor Yellow
-            return
+            throw "Path '$pathStr' already exists. Use -Force to update, or use a different path."
         }
 
         # Check if alias already exists for a different path
         if ($Alias) {
             $existingAlias = $config.paths | Where-Object { $_.alias -eq $Alias -and $_.path -ne $pathStr }
             if ($existingAlias -and -not $Force) {
-                Write-Error "Alias '$Alias' already exists for a different path. Use -Force to overwrite, or choose a different alias."
                 Write-Host "Existing path: $($existingAlias.path)" -ForegroundColor Yellow
-                return
+                throw "Alias '$Alias' already exists for a different path. Use -Force to overwrite, or choose a different alias."
             }
         }
 
@@ -307,12 +305,11 @@ function Remove-QuickJumpPath {
             if ($Alias) {
                 $entryToRemove = $config.paths | Where-Object { $_.alias -eq $Alias }
                 if (-not $entryToRemove) {
-                    Write-Error "No path found with alias '$Alias'"
                     $availableAliases = $config.paths | Where-Object { $_.alias } | Select-Object -ExpandProperty alias
                     if ($availableAliases) {
                         Write-Host "Available aliases: $($availableAliases -join ', ')" -ForegroundColor Yellow
                     }
-                    return
+                    throw "No path found with alias '$Alias'"
                 }
             } elseif ($Path) {
                 try {
@@ -323,8 +320,7 @@ function Remove-QuickJumpPath {
                 }
 
                 if (-not $entryToRemove) {
-                    Write-Error "No saved path found matching '$Path'"
-                    return
+                    throw "No saved path found matching '$Path'"
                 }
             }
 
@@ -474,13 +470,12 @@ function Get-QuickJumpPaths {
         $filteredPaths = $filteredPaths | Where-Object { $_.category -eq $Category }
         $filteredPaths = @($filteredPaths)
         if ($filteredPaths.Count -eq 0) {
-            Write-Error "No paths found in category '$Category'"
             $availableCategories = $allPaths | Where-Object { $_.category } |
                 Select-Object -ExpandProperty category -Unique | Sort-Object
             if ($availableCategories) {
                 Write-Host "Available categories: $($availableCategories -join ', ')" -ForegroundColor Yellow
             }
-            return
+            throw "No paths found in category '$Category'"
         }
     } else {
         $filteredPaths = @($filteredPaths)
@@ -841,7 +836,7 @@ function Get-QuickJumpCategories {
 
     if ($categories.Count -eq 0) {
         Write-Host 'No categories found.' -ForegroundColor Yellow
-        return
+        return @()
     }
 
     if ($Name) {
