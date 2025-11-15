@@ -12,7 +12,10 @@ It's designed to be used in CI/CD pipelines and as a pre-commit hook.
 Run formatting checks and fixes
 
 .PARAMETER Test
-Run unit tests
+Run unit tests (legacy custom framework)
+
+.PARAMETER Pester
+Run Pester tests with code coverage
 
 .PARAMETER Downloads
 Run portable downloads tests only
@@ -51,6 +54,7 @@ Run only unit tests (excluding downloads)
 param(
     [switch]$Format,
     [switch]$Test,
+    [switch]$Pester,
     [switch]$Downloads,
     [switch]$All,
     [switch]$Fix,
@@ -58,7 +62,7 @@ param(
 )
 
 # Default to All if no specific option is chosen
-if (-not $Format -and -not $Test -and -not $Downloads) {
+if (-not $Format -and -not $Test -and -not $Pester -and -not $Downloads) {
     $All = $true
 }
 
@@ -146,6 +150,50 @@ function Invoke-UnitTests {
     }
 }
 
+function Invoke-PesterTests {
+    Write-Host "`n=== Pester Tests ===" -ForegroundColor Yellow
+
+    $pesterRunner = Join-Path $PSScriptRoot 'Invoke-PesterTests.ps1'
+
+    if (-not (Test-Path $pesterRunner)) {
+        Write-Warning "Pester test runner not found: $pesterRunner"
+        Write-Info 'Skipping Pester tests (optional)'
+        return 0
+    }
+
+    # Check if Pester 5.x is available
+    $pesterModule = Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version -ge '5.0.0' } | Select-Object -First 1
+
+    if (-not $pesterModule) {
+        Write-Warning 'Pester 5.x is not installed'
+        Write-Info 'Install with: Install-Module -Name Pester -MinimumVersion 5.0.0 -Force'
+        Write-Info 'Skipping Pester tests (optional)'
+        return 0
+    }
+
+    try {
+        Write-Info 'Running Pester tests with code coverage...'
+
+        if ($CI) {
+            & $pesterRunner -CI -CoverageThreshold 70
+        } else {
+            & $pesterRunner -CodeCoverage
+        }
+
+        $exitCode = $LASTEXITCODE
+        if ($exitCode -eq 0) {
+            Write-Success 'All Pester tests passed'
+        } else {
+            Write-Error 'Some Pester tests failed'
+        }
+
+        return $exitCode
+    } catch {
+        Write-Error "Pester test execution failed: $($_.Exception.Message)"
+        return 1
+    }
+}
+
 function Invoke-PortableDownloadTests {
     Write-Host "`n=== Portable Downloads Tests ===" -ForegroundColor Yellow
 
@@ -220,6 +268,15 @@ function Main {
         if ($testResult -ne 0) {
             $overallSuccess = $false
             $exitCode = $testResult
+        }
+    }
+
+    # Run Pester tests
+    if ($Pester -or $All) {
+        $pesterResult = Invoke-PesterTests
+        if ($pesterResult -ne 0) {
+            $overallSuccess = $false
+            $exitCode = $pesterResult
         }
     }
 
