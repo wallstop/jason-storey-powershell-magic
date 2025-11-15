@@ -38,6 +38,7 @@ AfterAll {
     Remove-Item Env:\XDG_CONFIG_HOME -ErrorAction SilentlyContinue
 }
 
+
 Describe 'PowerShell Magic - Common Module' -Tag 'Unit', 'Common' {
 
     BeforeAll {
@@ -253,6 +254,14 @@ Describe 'PowerShell Magic - QuickJump Module' -Tag 'Unit', 'QuickJump' {
             (Get-QuickJumpPaths -Alias $alias -Path) | Should -Be $script:TestPath
         }
 
+        It 'Should warn when re-adding aliasless path without Force' {
+            $aliaslessPath = Join-Path $script:TestDrive ('aliasless-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+            New-Item -ItemType Directory -Path $aliaslessPath -Force | Out-Null
+            Add-QuickJumpPath -Path $aliaslessPath -Force
+            { Add-QuickJumpPath -Path $aliaslessPath -ErrorAction Stop } | Should -Throw
+            Remove-QuickJumpPath -Path $aliaslessPath -Confirm:$false
+        }
+
         It 'Should fail when path does not exist' {
             $nonExistentPath = Join-Path $script:TestDrive 'does-not-exist'
             { Add-QuickJumpPath -Path $nonExistentPath -Alias 'fail' -ErrorAction Stop } | Should -Throw
@@ -339,6 +348,41 @@ Describe 'PowerShell Magic - QuickJump Module' -Tag 'Unit', 'QuickJump' {
             ($categoryGroups | Where-Object { $_.Category -eq $categoryName }).Count | Should -BeGreaterOrEqual 1
         }
 
+        It 'Should show available aliases when alias lookup fails' {
+            { Get-QuickJumpPaths -Alias 'no-such-alias' -Path -ErrorAction Stop } | Should -Throw
+        }
+
+        It 'Should show available categories when filter has no matches' {
+            { Get-QuickJumpPaths -Category 'no-such-category' -ErrorAction Stop } | Should -Throw
+        }
+
+        It 'Should return path using fallback selector when -Interactive and -Path are specified' {
+            Mock -CommandName Test-FzfAvailable -ModuleName QuickJump -MockWith { $false }
+            Mock -CommandName Invoke-QuickJumpFallbackSelection -ModuleName QuickJump -MockWith {
+                [pscustomobject]@{ Path = $script:TestPath }
+            }
+
+            Get-QuickJumpPaths -Interactive -Path | Should -Be $script:TestPath
+        }
+
+        It 'Should navigate using fallback selector when interactive without -Path' {
+            $script:MockedLocation = $null
+            Mock -CommandName Test-FzfAvailable -ModuleName QuickJump -MockWith { $false }
+            Mock -CommandName Invoke-QuickJumpFallbackSelection -ModuleName QuickJump -MockWith {
+                [pscustomobject]@{
+                    Path = $script:TestPath
+                    Alias = 'fallback-alias'
+                }
+            }
+            Mock -CommandName Set-Location -ModuleName QuickJump -MockWith {
+                param($Path)
+                $script:MockedLocation = $Path
+            }
+
+            { Get-QuickJumpPaths -Interactive } | Should -Not -Throw
+            $script:MockedLocation | Should -Be $script:TestPath
+        }
+
     }
 
     Context 'Remove-QuickJumpPath' {
@@ -366,6 +410,71 @@ Describe 'PowerShell Magic - QuickJump Module' -Tag 'Unit', 'QuickJump' {
 
             Add-QuickJumpPath -Path $script:TestPath -Alias 'testdir' -Category 'testing' -Force
             Add-QuickJumpPath -Path $script:TestPath -Alias 'cattest' -Category 'testing' -Force
+        }
+
+        It 'Should inform user when removing without saved paths or selectors' {
+            $configPath = Get-QuickJumpConfigPath
+            $originalContent = if (Test-Path $configPath) { Get-Content $configPath -Raw } else { $null }
+            try {
+                @{ paths = @(); version = '1.0' } | ConvertTo-Json -Depth 5 | Set-Content $configPath -Encoding UTF8
+                Clear-PSMagicConfigCache -CacheKey 'quickjump'
+                { Remove-QuickJumpPath -Confirm:$false } | Should -Not -Throw
+            } finally {
+                if ($null -ne $originalContent) {
+                    Set-Content -Path $configPath -Value $originalContent -Encoding UTF8
+                } else {
+                    Remove-Item -Path $configPath -ErrorAction SilentlyContinue
+                }
+                Clear-PSMagicConfigCache -CacheKey 'quickjump'
+            }
+        }
+
+        It 'Should remove saved path even if directory was deleted' {
+            $stalePath = Join-Path $script:TestDrive ('stale-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+            New-Item -ItemType Directory -Path $stalePath -Force | Out-Null
+            $staleAlias = "stale-$([guid]::NewGuid().ToString('N').Substring(0, 6))"
+            Add-QuickJumpPath -Path $stalePath -Alias $staleAlias -Force
+            Remove-Item -Path $stalePath -Recurse -Force
+
+            { Remove-QuickJumpPath -Path $stalePath -Confirm:$false } | Should -Not -Throw
+            Get-QuickJumpPaths | Where-Object { $_.Alias -eq $staleAlias } | Should -BeNullOrEmpty
+        }
+
+        It 'Should throw when removing by path that is not saved' {
+            $unsavedPath = Join-Path $script:TestDrive ('unsaved-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+            New-Item -ItemType Directory -Path $unsavedPath -Force | Out-Null
+            try {
+                { Remove-QuickJumpPath -Path $unsavedPath -Confirm:$false -ErrorAction Stop } | Should -Throw
+            } finally {
+                Remove-Item -Path $unsavedPath -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+
+        It 'Should remove multiple paths using fallback interactive selection' {
+            $multiPathOne = Join-Path $script:TestDrive ('multi-one-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+            $multiPathTwo = Join-Path $script:TestDrive ('multi-two-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+            New-Item -ItemType Directory -Path $multiPathOne -Force | Out-Null
+            New-Item -ItemType Directory -Path $multiPathTwo -Force | Out-Null
+            $aliasOne = "multi-one-$([guid]::NewGuid().ToString('N').Substring(0, 6))"
+            $aliasTwo = "multi-two-$([guid]::NewGuid().ToString('N').Substring(0, 6))"
+            Add-QuickJumpPath -Path $multiPathOne -Alias $aliasOne -Force
+            Add-QuickJumpPath -Path $multiPathTwo -Alias $aliasTwo -Force
+
+            Mock -CommandName Test-FzfAvailable -ModuleName QuickJump -MockWith { $false }
+            Mock -CommandName Invoke-QuickJumpFallbackSelection -ModuleName QuickJump -ParameterFilter {
+                $AllowMulti
+            } -MockWith {
+                @(
+                    [pscustomobject]@{ Path = $multiPathOne; Alias = $aliasOne },
+                    [pscustomobject]@{ Path = $multiPathTwo; Alias = $aliasTwo }
+                )
+            }
+            Mock -CommandName Read-Host -ModuleName QuickJump -MockWith { 'y' }
+
+            { Remove-QuickJumpPath -Interactive -Multiple -Confirm:$false } | Should -Not -Throw
+
+            $remaining = Get-QuickJumpPaths | Where-Object { $_.Alias -in @($aliasOne, $aliasTwo) }
+            $remaining | Should -BeNullOrEmpty
         }
     }
 
@@ -395,6 +504,42 @@ Describe 'PowerShell Magic - QuickJump Module' -Tag 'Unit', 'QuickJump' {
                 $env:POWERSHELL_MAGIC_NON_INTERACTIVE = $originalValue
             }
         }
+
+        It 'Should report when no paths are saved' {
+            $configPath = Get-QuickJumpConfigPath
+            $originalContent = if (Test-Path $configPath) { Get-Content $configPath -Raw } else { $null }
+            try {
+                @{ paths = @(); version = '1.0' } | ConvertTo-Json -Depth 5 | Set-Content $configPath -Encoding UTF8
+                Clear-PSMagicConfigCache -CacheKey 'quickjump'
+                { Invoke-QuickJump } | Should -Not -Throw
+            } finally {
+                if ($null -ne $originalContent) {
+                    Set-Content -Path $configPath -Value $originalContent -Encoding UTF8
+                } else {
+                    Remove-Item -Path $configPath -ErrorAction SilentlyContinue
+                }
+                Clear-PSMagicConfigCache -CacheKey 'quickjump'
+            }
+        }
+
+        It 'Should fall back to interactive selection when alias is missing' {
+            Mock -CommandName Get-QuickJumpPaths -ModuleName QuickJump -MockWith {
+                param(
+                    $Category,
+                    $Interactive,
+                    $Alias,
+                    $SortByRecent,
+                    $SortByMostUsed,
+                    $Path,
+                    $ListCategories
+                )
+                if ($Interactive -and $Path) {
+                    return 'mock-interactive-path'
+                }
+            }
+
+            Invoke-QuickJump -Query 'not-an-alias' -Path | Should -Be 'mock-interactive-path'
+        }
     }
 
     Context 'Invoke-QuickJumpCategory command' {
@@ -420,6 +565,69 @@ Describe 'PowerShell Magic - QuickJump Module' -Tag 'Unit', 'QuickJump' {
                 Invoke-QuickJumpCategory -Path | Should -Be 'category-selected-path'
             } finally {
                 $env:POWERSHELL_MAGIC_NON_INTERACTIVE = $originalValue
+            }
+        }
+
+        It 'Should report when no QuickJump paths exist' {
+            $configPath = Get-QuickJumpConfigPath
+            $originalContent = if (Test-Path $configPath) { Get-Content $configPath -Raw } else { $null }
+            try {
+                @{ paths = @(); version = '1.0' } | ConvertTo-Json -Depth 5 | Set-Content $configPath -Encoding UTF8
+                Clear-PSMagicConfigCache -CacheKey 'quickjump'
+                { Invoke-QuickJumpCategory } | Should -Not -Throw
+            } finally {
+                if ($null -ne $originalContent) {
+                    Set-Content -Path $configPath -Value $originalContent -Encoding UTF8
+                } else {
+                    Remove-Item -Path $configPath -ErrorAction SilentlyContinue
+                }
+                Clear-PSMagicConfigCache -CacheKey 'quickjump'
+            }
+        }
+
+        It 'Should fall back to listing all paths when no categories exist' {
+            $noCategoryPath = Join-Path $script:TestDrive ('nocat-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+            New-Item -ItemType Directory -Path $noCategoryPath -Force | Out-Null
+
+            $configPath = Get-QuickJumpConfigPath
+            $originalContent = if (Test-Path $configPath) { Get-Content $configPath -Raw } else { $null }
+            try {
+                $paths = @(
+                    @{
+                        path = $noCategoryPath
+                        alias = 'nocat'
+                        category = $null
+                        added = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+                        lastUsed = $null
+                        useCount = 0
+                    }
+                )
+                @{ version = '1.0'; paths = $paths } | ConvertTo-Json -Depth 5 | Set-Content $configPath -Encoding UTF8
+                Clear-PSMagicConfigCache -CacheKey 'quickjump'
+
+                Mock -CommandName Get-QuickJumpPaths -ModuleName QuickJump -MockWith {
+                    param(
+                        $Category,
+                        $Interactive,
+                        $Alias,
+                        $SortByRecent,
+                        $SortByMostUsed,
+                        $Path,
+                        $ListCategories
+                    )
+                    if ($Interactive) {
+                        return 'fallback-no-category'
+                    }
+                }
+
+                Invoke-QuickJumpCategory -Path | Should -Be 'fallback-no-category'
+            } finally {
+                if ($null -ne $originalContent) {
+                    Set-Content -Path $configPath -Value $originalContent -Encoding UTF8
+                } else {
+                    Remove-Item -Path $configPath -ErrorAction SilentlyContinue
+                }
+                Clear-PSMagicConfigCache -CacheKey 'quickjump'
             }
         }
     }
@@ -476,6 +684,23 @@ Describe 'PowerShell Magic - QuickJump Module' -Tag 'Unit', 'QuickJump' {
                 Open-QuickJumpRecent -Interactive -Path | Should -Be 'recent-fallback-path'
             } finally {
                 $env:POWERSHELL_MAGIC_NON_INTERACTIVE = $originalValue
+            }
+        }
+
+        It 'Should report when no paths exist for recent lookup' {
+            $configPath = Get-QuickJumpConfigPath
+            $originalContent = if (Test-Path $configPath) { Get-Content $configPath -Raw } else { $null }
+            try {
+                @{ paths = @(); version = '1.0' } | ConvertTo-Json -Depth 5 | Set-Content $configPath -Encoding UTF8
+                Clear-PSMagicConfigCache -CacheKey 'quickjump'
+                { Open-QuickJumpRecent } | Should -Not -Throw
+            } finally {
+                if ($null -ne $originalContent) {
+                    Set-Content -Path $configPath -Value $originalContent -Encoding UTF8
+                } else {
+                    Remove-Item -Path $configPath -ErrorAction SilentlyContinue
+                }
+                Clear-PSMagicConfigCache -CacheKey 'quickjump'
             }
         }
     }

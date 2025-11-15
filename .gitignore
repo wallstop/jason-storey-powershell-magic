@@ -1,7 +1,12 @@
 # Pester artifacts
-Tests/Pester/coverage.xml
-Tests/Pester/coverage.html
-Tests/Pester/testResults.xml
+Tests/Pester/coverage*.xml
+Tests/Pester/coverage*.html
+Tests/Pester/testResults*.xml
+Tests/Pester/*.log
+Tests/Pester/*.trx
 
 # Local test logs
 TestRun.log
+
+# Temporary test outputs
+TestArtifacts/
