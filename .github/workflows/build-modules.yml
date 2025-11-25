@@ -26,7 +26,7 @@ jobs:
       PSGALLERY_APIKEY: ${{ secrets.PSGALLERY_APIKEY }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
