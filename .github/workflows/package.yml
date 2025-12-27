@@ -34,11 +34,46 @@ jobs:
           Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)" -ForegroundColor Cyan
           Write-Host "Operating System: ${{ matrix.os }}" -ForegroundColor Cyan
 
-      - name: Run Tests
+      - name: Install Pester
         run: |
+          Write-Host "Installing Pester 5.x for testing..." -ForegroundColor Cyan
+          Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -SkipPublisherCheck -Scope CurrentUser
+          $pester = Get-Module -Name Pester -ListAvailable | Select-Object -First 1
+          Write-Host "Installed Pester version: $($pester.Version)" -ForegroundColor Green
+
+      - name: Run formatting checks
+        run: |
+          Write-Host "Running PowerShell formatting checks..." -ForegroundColor Cyan
+          ./Format-PowerShell.ps1 -Check
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Formatting check failed"
+            exit $LASTEXITCODE
+          }
+
+      - name: Run unit tests
+        run: |
+          Write-Host "Running PowerShell unit tests..." -ForegroundColor Cyan
+          ./Tests/Test-PowerShellMagic.ps1
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Unit tests failed"
+            exit $LASTEXITCODE
+          }
+
+      - name: Run comprehensive test suite
+        run: |
+          Write-Host "Running comprehensive test suite..." -ForegroundColor Cyan
           ./Run-Tests.ps1 -CI
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "Tests failed on ${{ matrix.os }}"
+            Write-Error "Test suite failed on ${{ matrix.os }}"
+            exit $LASTEXITCODE
+          }
+
+      - name: Run Pester tests with code coverage
+        run: |
+          Write-Host "Running Pester test suite with code coverage..." -ForegroundColor Cyan
+          ./Invoke-PesterTests.ps1 -CI -CoverageThreshold 52
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Pester tests failed"
             exit $LASTEXITCODE
           }
 

@@ -39,23 +39,23 @@ jobs:
 
       - name: Run lint check (no auto-fix)
         id: lint
-        continue-on-error: true
         run: |
           pre-commit install
           # Run pre-commit in check-only mode (will fail if changes needed)
-          if ! pre-commit run --all-files; then
+          if pre-commit run --all-files; then
+            echo "lint_failed=false" >> $GITHUB_OUTPUT
+            echo "Lint check passed - no fixes needed"
+          else
             echo "lint_failed=true" >> $GITHUB_OUTPUT
             echo "Lint check failed - fixes needed"
             exit 1
-          else
-            echo "lint_failed=false" >> $GITHUB_OUTPUT
-            echo "Lint check passed - no fixes needed"
           fi
 
   lint-fix:
     name: Auto-fix Lint Issues
     needs: lint-check
-    if: needs.lint-check.outputs.lint_failed == 'true'
+    # Run if lint-check failed (use always() to run even when previous job failed)
+    if: always() && needs.lint-check.outputs.lint_failed == 'true'
     runs-on: windows-latest
     steps:
       - name: Checkout

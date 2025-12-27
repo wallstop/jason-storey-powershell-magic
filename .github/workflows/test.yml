@@ -68,13 +68,12 @@ jobs:
     - name: Run markdown lint
       if: matrix.os == 'ubuntu-latest'
       run: |
-        Write-Host "Running markdownlint with auto-fix..." -ForegroundColor Cyan
+        Write-Host "Running markdownlint check..." -ForegroundColor Cyan
         if (-not (Get-Command npx -ErrorAction SilentlyContinue)) {
           Write-Error "npx (Node.js) is required to run markdownlint-cli"
           exit 1
         }
-        npx markdownlint-cli@0.41.0 --config .markdownlint.json --fix . --ignore CHANGELOG.md
-        git diff --name-only --exit-code
+        npx markdownlint-cli@0.41.0 --config .markdownlint.json . --ignore CHANGELOG.md
 
     - name: Run unit tests
       run: |
