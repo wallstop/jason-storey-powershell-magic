@@ -44,6 +44,7 @@ repos:
           - './Scripts/Test-MarkdownLinks.ps1'
         language: system
         files: '\.(md|markdown)$'
+        pass_filenames: false
 
   # General file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
