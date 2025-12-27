@@ -21,7 +21,8 @@
             Tags = @('Navigation', 'Directory', 'Jump', 'FZF', 'Productivity')
             ProjectUri = 'https://github.com/wallstop/jason-storey-powershell-magic'
             LicenseUri = 'https://opensource.org/licenses/MIT'
-            ReleaseNotes = 'Enhanced with comprehensive documentation, tab completion, and standardized parameters'
+            ReleaseNotes = 'Modularization, optimizations, and better path handling.'
         }
     }
 }
+

@@ -41,8 +41,9 @@
             Tags = @('template', '7zip', 'workflow', 'fzf', 'starter', 'project')
             LicenseUri = 'https://opensource.org/licenses/MIT'
             ProjectUri = 'https://github.com/wallstop/jason-storey-powershell-magic'
-            ReleaseNotes = 'Version 2.2.0 - Enhanced documentation and variable substitution support'
+            ReleaseNotes = 'Modularization, optimizations, and better path handling.'
         }
     }
 }
+
 

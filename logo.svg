@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <!-- PowerShell blue gradient -->
+    <linearGradient id="psBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#5391FE"/>
+      <stop offset="100%" stop-color="#012456"/>
+    </linearGradient>
+
+    <!-- Magic purple gradient -->
+    <linearGradient id="magicPurple" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c084fc"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+
+    <!-- Magical aura glow -->
+    <radialGradient id="auraGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#a855f7" stop-opacity="0.5"/>
+      <stop offset="50%" stop-color="#6366f1" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Soft glow filter -->
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Stronger glow for chevron tip -->
+    <filter id="tipGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="200" cy="200" r="190" fill="#0d1117" stroke="url(#psBlue)" stroke-width="4"/>
+
+  <!-- Magical aura emanating from center -->
+  <ellipse cx="200" cy="200" rx="160" ry="160" fill="url(#auraGlow)"/>
+
+  <!-- Subtle concentric magic rings -->
+  <circle cx="200" cy="200" r="150" fill="none" stroke="#7c3aed" stroke-width="1" opacity="0.15"/>
+  <circle cx="200" cy="200" r="120" fill="none" stroke="#a855f7" stroke-width="1.5" opacity="0.2"/>
+  <circle cx="200" cy="200" r="90" fill="none" stroke="#c084fc" stroke-width="2" opacity="0.25"/>
+
+  <!-- PowerShell chevron - THE MAIN EVENT -->
+  <g transform="translate(200, 185)">
+    <!-- Glowing outline (magic emanation) -->
+    <g filter="url(#softGlow)" opacity="0.6">
+      <path d="M -100 -70 L 10 0 L -100 70"
+            fill="none"
+            stroke="url(#magicPurple)"
+            stroke-width="32"
+            stroke-linecap="round"
+            stroke-linejoin="round"/>
+    </g>
+
+    <!-- Main PS chevron -->
+    <path d="M -100 -70 L 10 0 L -100 70"
+          fill="none"
+          stroke="url(#psBlue)"
+          stroke-width="26"
+          stroke-linecap="round"
+          stroke-linejoin="round"/>
+
+    <!-- Glowing tip spark -->
+    <g filter="url(#tipGlow)">
+      <circle cx="10" cy="0" r="8" fill="#c084fc" opacity="0.8"/>
+      <circle cx="10" cy="0" r="4" fill="#e9d5ff"/>
+    </g>
+
+    <!-- Underscore with glow -->
+    <g filter="url(#softGlow)" opacity="0.5">
+      <line x1="30" y1="70" x2="105" y2="70"
+            stroke="url(#magicPurple)"
+            stroke-width="28"
+            stroke-linecap="round"/>
+    </g>
+    <line x1="30" y1="70" x2="105" y2="70"
+          stroke="url(#psBlue)"
+          stroke-width="22"
+          stroke-linecap="round"/>
+  </g>
+
+  <!-- Three module icons at bottom -->
+  <g transform="translate(200, 330)">
+    <!-- QuickJump icon (arrows/navigation) -->
+    <g transform="translate(-70, 0)">
+      <circle cx="0" cy="0" r="22" fill="#1e3a5f" stroke="#5391FE" stroke-width="2"/>
+      <path d="M -8 0 L 8 0 M 4 -4 L 8 0 L 4 4"
+            fill="none" stroke="#5391FE" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M 0 -8 L 0 8"
+            fill="none" stroke="#5391FE" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+    </g>
+
+    <!-- Templater icon (grid/template) -->
+    <g transform="translate(0, 0)">
+      <circle cx="0" cy="0" r="22" fill="#1e3a5f" stroke="#c084fc" stroke-width="2"/>
+      <rect x="-10" y="-10" width="8" height="8" fill="#c084fc" rx="1"/>
+      <rect x="2" y="-10" width="8" height="8" fill="#c084fc" rx="1" opacity="0.7"/>
+      <rect x="-10" y="2" width="8" height="8" fill="#c084fc" rx="1" opacity="0.7"/>
+      <rect x="2" y="2" width="8" height="8" fill="#c084fc" rx="1" opacity="0.5"/>
+    </g>
+
+    <!-- Unitea icon (Unity cube) -->
+    <g transform="translate(70, 0)">
+      <circle cx="0" cy="0" r="22" fill="#1e3a5f" stroke="#10b981" stroke-width="2"/>
+      <!-- Simplified Unity-style cube -->
+      <path d="M 0 -11 L 10 -5.5 L 10 5.5 L 0 11 L -10 5.5 L -10 -5.5 Z"
+            fill="none" stroke="#10b981" stroke-width="2"/>
+      <line x1="0" y1="-11" x2="0" y2="11" stroke="#10b981" stroke-width="1.5"/>
+      <line x1="-10" y1="-5.5" x2="10" y2="5.5" stroke="#10b981" stroke-width="1" opacity="0.6"/>
+    </g>
+  </g>
+</svg>

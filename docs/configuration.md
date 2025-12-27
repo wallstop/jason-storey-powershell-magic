@@ -40,7 +40,7 @@ runtime.
   in-memory updates.
 - Files are automatically backed up with a timestamp suffix before they are
   reset (see Unitea tests for examples).
-- Use the provided cmdlets (`Add-QuickJumpPath`, `Save-Template`,
+- Use the provided cmdlets (`Add-QuickJumpPath`, `Add-Template`,
   `Add-UnityProject`) instead of editing JSON directly whenever possible.
 
 ## Resetting State

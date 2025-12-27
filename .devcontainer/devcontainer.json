@@ -1,0 +1,42 @@
+{
+    "name": "PowerShell Magic Dev",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": "."
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.powershell",
+                "davidanson.vscode-markdownlint",
+                "esbenp.prettier-vscode",
+                "editorconfig.editorconfig",
+                "github.copilot",
+                "redhat.vscode-yaml"
+            ],
+            "settings": {
+                "terminal.integrated.defaultProfile.linux": "pwsh",
+                "terminal.integrated.profiles.linux": {
+                    "pwsh": {
+                        "path": "pwsh",
+                        "icon": "terminal-powershell"
+                    }
+                },
+                "powershell.codeFormatting.preset": "OTBS",
+                "powershell.codeFormatting.useCorrectCasing": true,
+                "powershell.scriptAnalysis.enable": true,
+                "files.eol": "\n",
+                "editor.formatOnSave": true,
+                "[powershell]": {
+                    "editor.defaultFormatter": "ms-vscode.powershell"
+                }
+            }
+        }
+    },
+    "postCreateCommand": "bash .devcontainer/post-create.sh",
+    "postStartCommand": "pwsh -NoProfile -Command 'Write-Host \"PowerShell $($PSVersionTable.PSVersion) ready!\" -ForegroundColor Green'",
+    "remoteUser": "vscode",
+    "containerEnv": {
+        "POWERSHELL_MAGIC_NON_INTERACTIVE": "1"
+    }
+}

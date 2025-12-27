@@ -63,9 +63,11 @@ function Initialize-PSMagicConfigCache {
             $watcher = New-Object System.IO.FileSystemWatcher
             $watcher.Path = $configDir
             $watcher.Filter = $configFile
-            $watcher.NotifyFilter = [System.IO.NotifyFilters]::LastWrite -bor `
-                [System.IO.NotifyFilters]::FileName -bor `
+            $watcher.NotifyFilter = (
+                [System.IO.NotifyFilters]::LastWrite -bor
+                [System.IO.NotifyFilters]::FileName -bor
                 [System.IO.NotifyFilters]::Size
+            )
             $watcher.IncludeSubdirectories = $false
 
             # Create event handler for file changes

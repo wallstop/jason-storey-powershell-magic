@@ -19,11 +19,11 @@ function Write-Success { param($Message) Write-Host "✅ $Message" -ForegroundCo
 function Write-Info {
     param($Message) Write-Host -Object "ℹ️ $Message" -ForegroundColor Cyan
 }
-function Write-Warning { param($Message) Write-Host "⚠️ $Message" -ForegroundColor Yellow }
-function Write-Error { param($Message) Write-Host "❌ $Message" -ForegroundColor Red }
+function Write-HookWarning { param($Message) Write-Host "⚠️ $Message" -ForegroundColor Yellow }
+function Write-HookError { param($Message) Write-Host "❌ $Message" -ForegroundColor Red }
 function Test-PowerShellVersion {
     if ($PSVersionTable.PSVersion.Major -lt 5) {
-        Write-Error 'PowerShell 5.0 or higher is required for pre-commit hooks'
+        Write-HookError 'PowerShell 5.0 or higher is required for pre-commit hooks'
         return $false
     }
     return $true
@@ -33,7 +33,7 @@ function Get-RepositoryRoot {
     try {
         $gitRoot = git rev-parse --show-toplevel 2>$null
         if ($LASTEXITCODE -eq 0) {
-            return $gitRoot.Replace('/', '\')
+            return [System.IO.Path]::GetFullPath($gitRoot)
         }
     } catch {}
 
@@ -61,7 +61,8 @@ function Get-StagedPowerShellFiles {
 
 function Test-PreCommitConditions {
     # Check if this is a merge commit (skip hooks for merge commits)
-    if (Test-Path '.git\MERGE_HEAD') {
+    $mergeHeadPath = Join-Path '.git' 'MERGE_HEAD'
+    if (Test-Path $mergeHeadPath) {
         Write-Info 'Merge commit detected - skipping pre-commit hooks'
         return $false
     }
@@ -101,19 +102,19 @@ function Invoke-PreCommitChecks {
         $formatterScript = Join-Path $repoRoot 'Format-PowerShell.ps1'
 
         if (-not (Test-Path $formatterScript)) {
-            Write-Warning "Formatter script not found: $formatterScript"
-            Write-Warning 'Skipping formatting check'
+            Write-HookWarning "Formatter script not found: $formatterScript"
+            Write-HookWarning 'Skipping formatting check'
         } else {
             try {
                 & $formatterScript -Check
                 if ($LASTEXITCODE -ne 0) {
-                    Write-Error 'Formatting issues found!'
+                    Write-HookError 'Formatting issues found!'
                     Write-Info "💡 Run './Format-PowerShell.ps1 -Fix' to automatically fix formatting issues"
                     return 1
                 }
                 Write-Success 'Formatting check passed'
             } catch {
-                Write-Error "Formatting check failed: $($_.Exception.Message)"
+                Write-HookError "Formatting check failed: $($_.Exception.Message)"
                 return 1
             }
         }
@@ -123,19 +124,19 @@ function Invoke-PreCommitChecks {
         $testScript = Join-Path $repoRoot 'Run-Tests.ps1'
 
         if (-not (Test-Path $testScript)) {
-            Write-Warning "Test script not found: $testScript"
-            Write-Warning 'Skipping tests'
+            Write-HookWarning "Test script not found: $testScript"
+            Write-HookWarning 'Skipping tests'
         } else {
             try {
                 & $testScript -Test
                 if ($LASTEXITCODE -ne 0) {
-                    Write-Error 'Tests failed!'
+                    Write-HookError 'Tests failed!'
                     Write-Info '💡 Fix the failing tests before committing'
                     return 1
                 }
                 Write-Success 'Tests passed'
             } catch {
-                Write-Error "Test execution failed: $($_.Exception.Message)"
+                Write-HookError "Test execution failed: $($_.Exception.Message)"
                 return 1
             }
         }
@@ -145,7 +146,7 @@ function Invoke-PreCommitChecks {
         return 0
 
     } catch {
-        Write-Error "Pre-commit hook failed: $($_.Exception.Message)"
+        Write-HookError "Pre-commit hook failed: $($_.Exception.Message)"
         return 1
     } finally {
         Pop-Location
@@ -157,6 +158,6 @@ try {
     $exitCode = Invoke-PreCommitChecks
     exit $exitCode
 } catch {
-    Write-Error "Pre-commit hook error: $($_.Exception.Message)"
+    Write-HookError "Pre-commit hook error: $($_.Exception.Message)"
     exit 1
 }

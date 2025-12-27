@@ -157,21 +157,21 @@ function Show-PSMagicHelp {
     }
 
     # Display help with custom formatting
-    Write-Host ''
-    Write-Host "PowerShell Magic - $CommandName" -ForegroundColor Cyan
-    Write-Host ('=' * 80) -ForegroundColor Cyan
-    Write-Host ''
+    Write-Information '' -InformationAction Continue
+    Write-Information "PowerShell Magic - $CommandName" -InformationAction Continue
+    Write-Information ('=' * 80) -InformationAction Continue
+    Write-Information '' -InformationAction Continue
 
     try {
         Get-Help @helpParams
     } catch {
         Write-Warning "Failed to retrieve help for '$CommandName': $($_.Exception.Message)"
-        Write-Host "Try: Get-Help $CommandName" -ForegroundColor Yellow
+        Write-Information "Try: Get-Help $CommandName" -InformationAction Continue
     }
 
-    Write-Host ''
-    Write-Host 'For more information, visit: https://github.com/wallstop/jason-storey-powershell-magic' -ForegroundColor Gray
-    Write-Host ''
+    Write-Information '' -InformationAction Continue
+    Write-Information 'For more information, visit: https://github.com/wallstop/jason-storey-powershell-magic' -InformationAction Continue
+    Write-Information '' -InformationAction Continue
 }
 
 function Add-PSMagicArgumentCompleter {

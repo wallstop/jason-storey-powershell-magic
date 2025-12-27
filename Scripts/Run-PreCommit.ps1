@@ -20,9 +20,9 @@ if (-not (Get-Command pre-commit -ErrorAction SilentlyContinue)) {
 function Invoke-PreCommitAll {
     param([switch]$ShowDiff)
 
-    $args = @('run', '--all-files')
-    if ($ShowDiff) { $args += '--show-diff-on-failure' }
-    & pre-commit @args
+    $preCommitArgs = @('run', '--all-files')
+    if ($ShowDiff) { $preCommitArgs += '--show-diff-on-failure' }
+    & pre-commit @preCommitArgs
     return $LASTEXITCODE
 }
 
