@@ -24,7 +24,20 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v6
       with:
-        ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
+        # For workflow_run, checkout the branch to get latest commits (including auto-fix commits)
+        ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || '' }}
+        fetch-depth: 0
+
+    - name: Show trigger context
+      run: |
+        Write-Host "Event name: ${{ github.event_name }}" -ForegroundColor Cyan
+        Write-Host "Current HEAD: $(git rev-parse HEAD)"
+        Write-Host "Latest commit: $(git log -1 --pretty='%h %s')"
+        if ("${{ github.event_name }}" -eq "workflow_run") {
+          Write-Host "Triggered by: ${{ github.event.workflow_run.name }}" -ForegroundColor Yellow
+          Write-Host "Original SHA: ${{ github.event.workflow_run.head_sha }}"
+          Write-Host "Branch: ${{ github.event.workflow_run.head_branch }}"
+        }
 
     - name: Setup PowerShell
       run: |
@@ -116,7 +129,9 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v6
       with:
-        ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
+        # For workflow_run, checkout the branch to get latest commits (including auto-fix commits)
+        ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || '' }}
+        fetch-depth: 0
 
     - name: Test module imports
       run: |
@@ -165,7 +180,9 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v6
       with:
-        ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
+        # For workflow_run, checkout the branch to get latest commits (including auto-fix commits)
+        ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || '' }}
+        fetch-depth: 0
 
     - name: Run PSScriptAnalyzer security rules
       run: |
@@ -241,7 +258,9 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v6
       with:
-        ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
+        # For workflow_run, checkout the branch to get latest commits (including auto-fix commits)
+        ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || '' }}
+        fetch-depth: 0
 
     - name: Show PowerShell environment
       run: |
