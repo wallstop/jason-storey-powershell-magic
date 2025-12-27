@@ -3,7 +3,8 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+and this project adheres to
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
@@ -73,6 +74,7 @@ Initial public release.
 ### Added
 
 - **QuickJump** - Fast directory navigation with saved aliases
+
   - `qj` - Jump to saved path or show interactive picker
   - `qja` - Save current directory with an alias
   - `qjl` - List all saved paths
@@ -84,6 +86,7 @@ Initial public release.
   - Tab completion for aliases and categories
 
 - **Templater** - Project template management
+
   - `templates` - Browse and deploy templates interactively
   - `add-tpl` - Register templates from ZIP, 7Z, RAR, TAR, or folders
   - `use-tpl` - Deploy templates with `{{token}}` substitution
@@ -93,6 +96,7 @@ Initial public release.
   - Import/export for backup and sharing
 
 - **Unitea** - Unity project management
+
   - `unity` - Open Unity project or show interactive picker
   - `unity-add` - Register a Unity project
   - `unity-list` - List saved Unity projects
@@ -104,8 +108,13 @@ Initial public release.
 - Interactive setup script with automatic tool installation
 - Automatic profile backup before modifications
 
-[Unreleased]: https://github.com/wallstop/jason-storey-powershell-magic/compare/v2.2.0...HEAD
-[2.2.0]: https://github.com/wallstop/jason-storey-powershell-magic/compare/v2.1.0...v2.2.0
-[2.1.0]: https://github.com/wallstop/jason-storey-powershell-magic/compare/v2.0.0...v2.1.0
-[2.0.0]: https://github.com/wallstop/jason-storey-powershell-magic/compare/v1.0.1...v2.0.0
-[1.0.1]: https://github.com/wallstop/jason-storey-powershell-magic/releases/tag/v1.0.1
+[Unreleased]:
+  https://github.com/wallstop/jason-storey-powershell-magic/compare/v2.2.0...HEAD
+[2.2.0]:
+  https://github.com/wallstop/jason-storey-powershell-magic/compare/v2.1.0...v2.2.0
+[2.1.0]:
+  https://github.com/wallstop/jason-storey-powershell-magic/compare/v2.0.0...v2.1.0
+[2.0.0]:
+  https://github.com/wallstop/jason-storey-powershell-magic/compare/v1.0.1...v2.0.0
+[1.0.1]:
+  https://github.com/wallstop/jason-storey-powershell-magic/releases/tag/v1.0.1
