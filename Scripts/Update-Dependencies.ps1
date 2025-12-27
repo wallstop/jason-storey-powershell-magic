@@ -455,7 +455,7 @@ function Get-FileHash-Remote {
         [string]$DependencyName
     )
 
-    $tempFile = Join-Path $env:TEMP "$DependencyName-$(Get-Date -Format 'yyyyMMddHHmmss').tmp"
+    $tempFile = Join-Path ([System.IO.Path]::GetTempPath()) "$DependencyName-$(Get-Date -Format 'yyyyMMddHHmmss').tmp"
 
     try {
         Write-Info "Downloading $DependencyName from $Url to verify hash..."

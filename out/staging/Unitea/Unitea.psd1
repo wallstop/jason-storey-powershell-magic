@@ -22,7 +22,8 @@
             Tags = @('Unity', 'ProjectManagement', 'FZF')
             ProjectUri = 'https://github.com/wallstop/jason-storey-powershell-magic'
             LicenseUri = 'https://opensource.org/licenses/MIT'
-            ReleaseNotes = 'Added config path function and enhanced interactive remove'
+            ReleaseNotes = 'Modularization, optimizations, and better path handling.'
         }
     }
 }
+

@@ -76,7 +76,7 @@ function Get-VersionMetadata {
     throw 'Module version is required. Pass -Version or add build/version.json.'
 }
 
-function Ensure-OutputDirectory {
+function Initialize-OutputDirectory {
     param([string]$Path)
 
     if (-not (Test-Path -LiteralPath $Path)) {
@@ -163,7 +163,7 @@ function Get-ReleaseNotes {
     return ($buffer -join [Environment]::NewLine)
 }
 
-function Escape-Psd1String {
+function ConvertTo-Psd1EscapedString {
     param([string]$Value)
 
     return ($Value -replace "'", "''")
@@ -188,7 +188,7 @@ function Compress-ReleaseNotesForManifest {
     }
 
     $compressed = $noteLines | ForEach-Object {
-        (Escape-Psd1String -Value $_.Trim())
+        (ConvertTo-Psd1EscapedString -Value $_.Trim())
     }
 
     return ($compressed -join '; ')
@@ -231,7 +231,7 @@ function Update-ManifestFile {
     Set-Content -LiteralPath $ManifestPath -Value $content -Encoding UTF8
 }
 
-function Stage-Module {
+function Copy-ModuleToStaging {
     param(
         [Parameter(Mandatory = $true)]
         [pscustomobject]$ManifestInfo,
@@ -327,7 +327,7 @@ function Publish-LocalPackage {
     return $packagePath.FullName
 }
 
-function Normalize-StringArray {
+function ConvertTo-NormalizedArray {
     param($Value)
 
     if (-not $Value) { return @() }
@@ -372,7 +372,7 @@ try {
     Write-Host ''
 
     $stagedModules = foreach ($manifest in $manifests) {
-        Stage-Module -ManifestInfo $manifest -Version $resolvedVersion -ReleaseNotes $resolvedNotes -OutputRoot $stagingRoot
+        Copy-ModuleToStaging -ManifestInfo $manifest -Version $resolvedVersion -ReleaseNotes $resolvedNotes -OutputRoot $stagingRoot
     }
 
     Write-Host 'Staged modules:' -ForegroundColor Yellow
@@ -408,9 +408,9 @@ try {
             Version = [string]$manifestData.ModuleVersion
             PackagePath = (Resolve-Path -LiteralPath $pkg.PackagePath).Path
             PackageHashSha256 = $hash.Hash
-            FunctionsToExport = Normalize-StringArray $manifestData.FunctionsToExport
-            AliasesToExport = Normalize-StringArray $manifestData.AliasesToExport
-            Tags = if ($manifestData.PrivateData -and $manifestData.PrivateData.PSData) { Normalize-StringArray $manifestData.PrivateData.PSData.Tags } else { @() }
+            FunctionsToExport = ConvertTo-NormalizedArray $manifestData.FunctionsToExport
+            AliasesToExport = ConvertTo-NormalizedArray $manifestData.AliasesToExport
+            Tags = if ($manifestData.PrivateData -and $manifestData.PrivateData.PSData) { ConvertTo-NormalizedArray $manifestData.PrivateData.PSData.Tags } else { @() }
             ReleaseNotes = if ($manifestData.PrivateData -and $manifestData.PrivateData.PSData) { $manifestData.PrivateData.PSData.ReleaseNotes } else { $null }
             ManifestPath = (Resolve-Path -LiteralPath $pkg.Manifest).Path
         }

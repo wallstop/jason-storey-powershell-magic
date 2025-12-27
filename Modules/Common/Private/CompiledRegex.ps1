@@ -210,7 +210,7 @@ function Test-PSMagicRegexPerformance {
         [int]$Iterations = 100000
     )
 
-    Write-Host "Testing regex performance with $Iterations iterations..." -ForegroundColor Cyan
+    Write-Verbose "Testing regex performance with $Iterations iterations..."
 
     # Warm up JIT to reduce first-call overhead
     $null = $TestString -match $Pattern

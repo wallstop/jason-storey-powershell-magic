@@ -34,7 +34,7 @@ function Get-PSMagicConfigRoot {
     return Join-Path (Get-Location).Path '.config'
 }
 
-function Ensure-PSMagicDirectory {
+function Initialize-PSMagicDirectory {
     param(
         [Parameter(Mandatory = $true)]
         [string]$Path
@@ -88,7 +88,7 @@ function Get-PSMagicConfigPath {
     )
 
     $configRoot = Get-PSMagicConfigRoot
-    $componentDirectory = Ensure-PSMagicDirectory -Path (Join-Path $configRoot $Component)
+    $componentDirectory = Initialize-PSMagicDirectory -Path (Join-Path $configRoot $Component)
 
     if ($ReturnDirectory -or [string]::IsNullOrWhiteSpace($FileName)) {
         return $componentDirectory

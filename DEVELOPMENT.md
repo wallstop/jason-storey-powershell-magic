@@ -190,7 +190,7 @@ steps:
 
 ### For Development
 
-- **PowerShell 5.1+**: Core requirement
+- **PowerShell 7.0+**: Required to run modules and tests
 - **Git**: Version control
 - **PSScriptAnalyzer**: Auto-installed by formatter script
 

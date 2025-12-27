@@ -137,7 +137,7 @@ qj          # Shows interactive menu
 
 **Required:**
 
-- PowerShell 5.1 or higher
+- PowerShell 7.0 or higher
 - QuickJump module imported (via setup script)
 
 **Optional but highly recommended:**
@@ -1086,7 +1086,13 @@ code (Get-QuickJumpConfigPath)
 explorer (Get-QuickJumpConfigPath -ReturnDirectory)
 ```
 
-Default location: `~\.config\quickjump\paths.json`
+Default location varies by platform (use `Get-QuickJumpConfigPath` to find
+yours):
+
+- **Windows:** `%LOCALAPPDATA%\PowerShellMagic\quickjump\paths.json`
+- **macOS:**
+  `~/Library/Application Support/PowerShellMagic/quickjump/paths.json`
+- **Linux:** `~/.config/PowerShellMagic/quickjump/paths.json`
 
 ### Config File Structure
 

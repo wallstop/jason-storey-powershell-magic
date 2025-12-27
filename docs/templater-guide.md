@@ -5,14 +5,16 @@ renaming files, and replacing tokens in one step.
 
 ## Overview
 
+- **Add-Template** – registers a template directory or archive with an alias.
 - **Use-Template** – deploys a template into a target folder with optional
   variable substitution.
 - **Get-Templates** – lists available templates on disk.
+- **Remove-Template** – removes a template registration (not the source files).
 - **Export-Templates / Import-Templates** – share templates as portable
   archives.
-- **Update-Template** – refreshes a template after making improvements to an
-  existing deployment.
-- **Get-TemplateStats** – surfaces usage metrics and hash information.
+- **Update-Template** – updates metadata for an existing template.
+- **Get-TemplateStats** – surfaces usage metrics and category information.
+- **Get-TemplaterConfigPath** – resolves the path to the configuration file.
 
 All commands accept the fallback interactive mode when `fzf` is unavailable,
 mirroring the QuickJump experience.
@@ -22,10 +24,10 @@ mirroring the QuickJump experience.
 1. Prepare a directory tree that represents the desired starting point.
 2. Add templater variables anywhere in file content or file names using the
    `{{VariableName}}` syntax.
-3. Save the template:
+3. Register the template:
 
    ```powershell
-   Save-Template -Name 'dotnet-api' -Path 'C:\Scaffolding\DotNetWebApi'
+   Add-Template -Alias 'dotnet-api' -Path 'C:\Scaffolding\DotNetWebApi' -Description 'ASP.NET Core Web API starter'
    ```
 
 4. (Optional) Provide default metadata in

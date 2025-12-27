@@ -1,8 +1,21 @@
 # PowerShell Magic 🪄
 
+<!-- markdownlint-disable MD033 -->
+<p align="center">
+  <img src="logo.svg" alt="PowerShell Magic Logo" width="200">
+</p>
+<!-- markdownlint-enable MD033 -->
+
 > **Supercharge your PowerShell workflow** with lightning-fast directory
 > navigation, instant project templates, and Unity project management. **Works
 > everywhere PowerShell does** - Windows, macOS, and Linux! 🌍
+>
+> [!NOTE] > **Attribution:** The original versions of these tools were developed
+> by [Jason Storey](https://github.com/jason-storey). They have since been
+> adapted, streamlined, and improved through a collaboration between various AI
+> agents and [wallstop](https://github.com/wallstop). All changes have been made
+> with human direction and oversight. AI has been used to create features, catch
+> bugs, improve performance, and generate documentation.
 
 [![PowerShell][badge-pwsh]][link-pwsh] [![License: MIT][badge-license]](LICENSE)
 ![Platform: Windows][badge-windows] ![Platform: macOS][badge-macos]

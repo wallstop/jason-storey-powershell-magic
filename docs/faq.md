@@ -41,10 +41,11 @@ platform and uses the right install location and package managers:
 
 - **Windows:** Stores files in `%LOCALAPPDATA%\PowerShellMagic` and offers to
   use winget, Scoop, or Chocolatey.
-- **macOS:** Uses the XDG-compliant path `~/.local/share/powershell-magic` and
-  leverages Homebrew if available.
-- **Linux:** Installs under `~/.local/share/powershell-magic` and supports apt,
-  dnf, or pacman when they're present.
+- **macOS:** Uses `~/Library/Application Support/PowerShellMagic` and leverages
+  Homebrew if available.
+- **Linux:** Installs under `~/.config/powershell-magic` (or
+  `$XDG_CONFIG_HOME/powershell-magic`) and supports apt, dnf, or pacman when
+  they're present.
 
 Install PowerShell 7 first if you don't already have it:
 
@@ -154,7 +155,8 @@ categories to organize large numbers.
 
 ### Can I share my saved paths with a team?
 
-Yes! Config file at `~\.config\quickjump\paths.json` can be shared.
+Yes! Config file can be shared (use `Get-QuickJumpConfigPath` to find the
+location on your platform).
 
 **Note:** Paths are absolute, so team members need to adjust for their systems.
 
@@ -247,15 +249,18 @@ Changes take effect immediately (templates reference the source).
 
 ### Can templates include variables or placeholders?
 
-Not currently. Templates are copied/extracted as-is.
-
-**Workaround:** Use template + manual find/replace:
+Yes! Templates support token substitution using the `{{VariableName}}` syntax.
+Tokens can appear in file content or file names.
 
 ```powershell
-use-tpl mytemplate -SubfolderName "NewProject"
-cd NewProject
-# Then manually replace placeholders in files
+# Deploy with variable substitution
+Use-Template -Alias mytemplate -Destination .\NewProject `
+    -Variables @{ ProjectName = 'MyApp'; Namespace = 'MyApp.Core' }
 ```
+
+The `-VariableExtensions` parameter controls which file types are processed for
+token replacement (defaults to common text file extensions like `.cs`, `.json`,
+`.xml`, `.md`, etc.).
 
 ### How do I share templates with my team?
 
@@ -465,11 +470,17 @@ Or use portable installations via setup script.
 
 ### Where are configs stored?
 
-Default location: `~\.config\`
+Default locations vary by platform:
 
-- QuickJump: `~\.config\quickjump\paths.json`
-- Templater: `~\.config\templater\templates.json`
-- Unitea: `~\.config\unity\projects.json`
+- **Windows:** `%LOCALAPPDATA%\PowerShellMagic`
+- **macOS:** `~/Library/Application Support/PowerShellMagic`
+- **Linux:** `~/.config/PowerShellMagic` (or `$XDG_CONFIG_HOME/PowerShellMagic`)
+
+Within these directories:
+
+- QuickJump: `quickjump/paths.json`
+- Templater: `templater/templates.json`
+- Unitea: `unity/projects.json`
 
 ### Can I edit config files manually?
 
@@ -487,8 +498,8 @@ Yes! Before any modifications, configs are backed up:
 
 ```powershell
 # Find backups
-Get-ChildItem "~\.config\quickjump\paths.json.backup.*"
-Get-ChildItem "~\.config\templater\templates.json.backup.*"
+Get-ChildItem "$(Get-QuickJumpConfigPath).backup.*"
+Get-ChildItem "$(Get-TemplaterConfigPath).backup.*"
 ```
 
 ### Can I move config files?
