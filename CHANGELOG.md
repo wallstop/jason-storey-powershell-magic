@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   simultaneously
 - QuickJump now uses atomic read-modify-write operations to prevent race
   conditions
+- Test diagnostic output now correctly reports job result counts by filtering
+  out non-result objects from `Receive-Job` output
 
 ## [2.2.0] - 2024-12-15
 

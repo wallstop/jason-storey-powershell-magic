@@ -804,9 +804,11 @@ Describe 'PowerShell Magic - Error Conditions' -Tag 'ErrorHandling' {
             $jobs | Remove-Job -Force
 
             # Diagnostic output for troubleshooting
-            $successCount = @($jobResults | Where-Object { $_.Success }).Count
-            $failedJobs = @($jobResults | Where-Object { -not $_.Success })
-            Write-Host "Job results: $successCount succeeded, $($failedJobs.Count) failed" -ForegroundColor Cyan
+            # Filter to only job results that have the Success property (exclude error records, verbose output, etc.)
+            $validJobResults = @($jobResults | Where-Object { $null -ne $_.Success })
+            $successCount = @($validJobResults | Where-Object { $_.Success -eq $true }).Count
+            $failedJobs = @($validJobResults | Where-Object { $_.Success -eq $false })
+            Write-Host "Job results: $successCount succeeded, $($failedJobs.Count) failed (of $($validJobResults.Count) valid results)" -ForegroundColor Cyan
             if ($failedJobs.Count -gt 0) {
                 Write-Host "Failed jobs:" -ForegroundColor Yellow
                 $failedJobs | ForEach-Object {
