@@ -247,6 +247,89 @@ function Save-QuickJumpConfig {
     }
 }
 
+function Invoke-QuickJumpAtomicUpdate {
+    <#
+    .SYNOPSIS
+    Performs an atomic read-modify-write operation on the QuickJump configuration.
+
+    .DESCRIPTION
+    Ensures the entire read-modify-write cycle is performed within a single lock,
+    preventing race conditions when multiple processes update the config simultaneously.
+
+    .PARAMETER UpdateScriptBlock
+    A script block that receives the current config and returns the modified config.
+    The script block should take one parameter ($config) and return the modified hashtable.
+
+    .EXAMPLE
+    Invoke-QuickJumpAtomicUpdate -UpdateScriptBlock {
+        param($config)
+        $config.paths += @{ path = 'C:\Test'; alias = 'test' }
+        return $config
+    }
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [scriptblock]$UpdateScriptBlock
+    )
+
+    $configPath = Get-QuickJumpConfigPath
+
+    # Ensure config directory exists
+    $parentDir = Split-Path $configPath -Parent
+    if (-not (Test-Path -LiteralPath $parentDir)) {
+        New-Item -ItemType Directory -Path $parentDir -Force | Out-Null
+    }
+
+    # Perform entire read-modify-write within a single lock
+    Invoke-QuickJumpConfigLock -ConfigPath $configPath -ScriptBlock {
+        # Read current config directly from disk (bypass cache)
+        $config = if (Test-Path $configPath) {
+            try {
+                $loadedConfig = Get-Content $configPath -Raw -ErrorAction Stop |
+                    ConvertFrom-Json -AsHashtable -ErrorAction Stop
+
+                if (-not $loadedConfig) {
+                    $loadedConfig = New-QuickJumpConfig
+                }
+
+                if (-not $loadedConfig.ContainsKey('paths') -or -not $loadedConfig.paths) {
+                    $loadedConfig.paths = @()
+                }
+
+                $loadedConfig
+            } catch {
+                Write-Warning "QuickJump configuration at '$configPath' is invalid: $($_.Exception.Message)"
+                New-QuickJumpConfig
+            }
+        } else {
+            New-QuickJumpConfig
+        }
+
+        # Apply the update
+        $modifiedConfig = & $UpdateScriptBlock $config
+
+        # Write the modified config atomically
+        $json = $modifiedConfig | ConvertTo-Json -Depth 10
+        $tempFile = [System.IO.Path]::GetTempFileName()
+        $encoding = New-Object System.Text.UTF8Encoding($false)
+
+        try {
+            [System.IO.File]::WriteAllText($tempFile, $json, $encoding)
+            Move-Item -LiteralPath $tempFile -Destination $configPath -Force
+        } finally {
+            if (Test-Path $tempFile) {
+                Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue
+            }
+        }
+
+        return $modifiedConfig
+    }
+
+    # Clear the cache after the atomic update
+    Clear-PSMagicConfigCache -CacheKey 'quickjump'
+}
+
 function Get-QuickJumpRecordDisplay {
     param(
         [Parameter(Mandatory = $true)]
