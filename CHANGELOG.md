@@ -12,7 +12,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - In-memory configuration caching with automatic invalidation for faster repeat
   operations
 - Compiled regex patterns for improved performance in path matching
-- Universal `--help` flag support for all commands
 
 ### Fixed
 
@@ -21,7 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - QuickJump now uses atomic read-modify-write operations to prevent race
   conditions
 
-## [1.1.0] - 2025-10-29
+## [2.2.0] - 2024-12-15
+
+### Added
+
+- Common module with shared utilities (`Get-PSMagicConfigPath`,
+  `Test-FzfAvailable`, `Test-PSMagicNonInteractive`)
+- Public/Private folder structure for cleaner module organization
+
+### Changed
+
+- Improved path handling with `-LiteralPath` for better special character
+  support
+- More robust path validation for downloads and file operations
+
+## [2.1.0] - 2024-11-20
 
 ### Added
 
@@ -29,19 +42,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   changes
 - `unity-check` command to detect when saved project versions drift from actual
   versions
-- Automatic Unity metadata sync at shell startup (opt-in via
+- `-AutoUpdate` flag on `unity` command to automatically sync metadata on launch
+- Automatic metadata sync at shell startup (opt-in via
   `POWERSHELL_MAGIC_UNITEA_AUTOUPDATE_STARTUP` environment variable)
-- Build automation for PowerShell Gallery packaging
-- Publishing guide with gallery release instructions
+
+## [2.0.0] - 2024-10-15
+
+### Added
+
+- True cross-platform support for Windows, macOS, and Linux
+- Platform-specific Unity Hub detection (macOS `/Applications`, Linux paths)
+- Platform-specific 7-Zip detection (`7zz`, `7z`, `7za`, `7zzs`)
+- XDG config directory support on Unix systems
+- Configuration caching for faster access with automatic invalidation
+- Automatic config backup and corruption recovery with timestamped backups
+- Hash-based verification for 7-Zip executables
 
 ### Changed
 
-- Modules now use Public/Private folder structure for cleaner organization
-- Setup script detects platform-specific package managers (winget, Scoop,
-  Homebrew, apt, dnf, pacman)
-- Enhanced transparency during setup with detailed progress messages
+- Better error messages with recovery suggestions
+- QuickJump now returns structured records with sorting options
+- Improved path display with truncation for long paths
 
-## [1.0.0] - 2025-10-01
+## [1.0.1] - 2024-09-01
+
+### Fixed
+
+- CI/CD workflow issues
+- Version tagging automation
+
+## [1.0.0] - 2024-08-15
 
 ### Added
 
@@ -74,10 +104,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Automatic Unity version detection via Unity Hub
   - Recent project tracking
 
-- Cross-platform support for Windows, macOS, and Linux
 - Interactive setup script with automatic tool installation
 - Automatic profile backup before modifications
 
-[Unreleased]: https://github.com/wallstop/jason-storey-powershell-magic/compare/v1.1.0...HEAD
-[1.1.0]: https://github.com/wallstop/jason-storey-powershell-magic/compare/v1.0.0...v1.1.0
+[Unreleased]: https://github.com/wallstop/jason-storey-powershell-magic/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/wallstop/jason-storey-powershell-magic/compare/v2.1.0...v2.2.0
+[2.1.0]: https://github.com/wallstop/jason-storey-powershell-magic/compare/v2.0.0...v2.1.0
+[2.0.0]: https://github.com/wallstop/jason-storey-powershell-magic/compare/v1.0.1...v2.0.0
+[1.0.1]: https://github.com/wallstop/jason-storey-powershell-magic/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/wallstop/jason-storey-powershell-magic/releases/tag/v1.0.0
