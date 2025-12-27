@@ -778,11 +778,12 @@ Describe 'PowerShell Magic - Error Conditions' -Tag 'ErrorHandling' {
     }
 
     Context 'Concurrent Access' {
-        It 'Should handle multiple simultaneous config updates' {
+        It 'Should handle multiple simultaneous config updates with atomic locking' {
             $testPath = Join-Path $script:TestDrive 'concurrent-test'
             New-Item -ItemType Directory -Path $testPath -Force | Out-Null
 
-            # Simulate concurrent writes
+            # Simulate concurrent writes - each job adds a path with unique alias
+            # With atomic read-modify-write, all should succeed
             $jobs = 1..5 | ForEach-Object {
                 Start-Job -ScriptBlock {
                     param($CommonModulePath, $ModulePath, $Path, $Index, $ConfigHome)
@@ -790,18 +791,117 @@ Describe 'PowerShell Magic - Error Conditions' -Tag 'ErrorHandling' {
                     $env:POWERSHELL_MAGIC_NON_INTERACTIVE = '1'
                     Import-Module $CommonModulePath -Force -Global
                     Import-Module $ModulePath -Force
-                    Add-QuickJumpPath -Path $Path -Alias "concurrent$Index" -ErrorAction SilentlyContinue
+                    try {
+                        Add-QuickJumpPath -Path $Path -Alias "concurrent$Index" -ErrorAction Stop
+                        return @{ Success = $true; Index = $Index; Error = $null }
+                    } catch {
+                        return @{ Success = $false; Index = $Index; Error = $_.Exception.Message }
+                    }
                 } -ArgumentList $script:CommonModule, $script:QuickJumpModule, $testPath, $_, $env:XDG_CONFIG_HOME
             }
 
-            $jobs | Wait-Job -Timeout 10 | Out-Null
-            $jobs | Receive-Job | Out-Null
+            $jobResults = $jobs | Wait-Job -Timeout 30 | Receive-Job
             $jobs | Remove-Job -Force
 
-            # All aliases should be present
+            # Diagnostic output for troubleshooting
+            # Filter to only job results that have the Success property (exclude error records, verbose output, etc.)
+            $validJobResults = @($jobResults | Where-Object { $null -ne $_.Success })
+            $successCount = @($validJobResults | Where-Object { $_.Success -eq $true }).Count
+            $failedJobs = @($validJobResults | Where-Object { $_.Success -eq $false })
+            Write-Host "Job results: $successCount succeeded, $($failedJobs.Count) failed (of $($validJobResults.Count) valid results)" -ForegroundColor Cyan
+            if ($failedJobs.Count -gt 0) {
+                Write-Host 'Failed jobs:' -ForegroundColor Yellow
+                $failedJobs | ForEach-Object {
+                    Write-Host "  Job $($_.Index): $($_.Error)" -ForegroundColor Red
+                }
+            }
+
+            # Clear cache to ensure we read fresh data from disk
+            # Background jobs wrote to the file but main process has stale cache
+            Clear-PSMagicConfigCache -CacheKey 'quickjump'
+
+            # Read config directly from file for verification
+            $configPath = Get-QuickJumpConfigPath
+            $rawConfig = if (Test-Path $configPath) {
+                Get-Content $configPath -Raw | ConvertFrom-Json -AsHashtable
+            } else {
+                @{ paths = @() }
+            }
+            Write-Host "Config file contains $($rawConfig.paths.Count) entries" -ForegroundColor Cyan
+            $rawConfig.paths | ForEach-Object {
+                Write-Host "  - Alias: $($_.alias), Path: $($_.path)" -ForegroundColor Gray
+            }
+
+            # Now get paths through the module (cache should be cleared)
             $paths = Get-QuickJumpPaths
-            $concurrentCount = ($paths | Where-Object { $_.Alias -like 'concurrent*' }).Count
-            $concurrentCount | Should -BeGreaterThan 0
+            $concurrentCount = @($paths | Where-Object { $_.Alias -like 'concurrent*' }).Count
+
+            Write-Host "Found $concurrentCount concurrent aliases via Get-QuickJumpPaths" -ForegroundColor Cyan
+
+            # With atomic read-modify-write, all 5 concurrent writes should succeed
+            $concurrentCount | Should -Be 5 -Because "all 5 concurrent writes should succeed with atomic locking (found $concurrentCount)"
+        }
+
+        It 'Should handle rapid sequential updates without data loss' {
+            $testPath = Join-Path $script:TestDrive 'sequential-test'
+            New-Item -ItemType Directory -Path $testPath -Force | Out-Null
+
+            # Clear any existing config
+            Clear-PSMagicConfigCache -CacheKey 'quickjump'
+
+            # Add 10 paths rapidly in sequence
+            $expectedCount = 10
+            1..$expectedCount | ForEach-Object {
+                $uniquePath = Join-Path $testPath "subdir-$_"
+                New-Item -ItemType Directory -Path $uniquePath -Force | Out-Null
+                Add-QuickJumpPath -Path $uniquePath -Alias "rapid-$_" -ErrorAction Stop
+            }
+
+            # Verify all entries were saved
+            Clear-PSMagicConfigCache -CacheKey 'quickjump'
+            $paths = Get-QuickJumpPaths
+            $rapidCount = @($paths | Where-Object { $_.Alias -like 'rapid-*' }).Count
+
+            $rapidCount | Should -Be $expectedCount -Because "all $expectedCount rapid sequential writes should persist"
+        }
+
+        It 'Should preserve existing entries when adding new ones concurrently' {
+            $testPath = Join-Path $script:TestDrive 'preserve-test'
+            New-Item -ItemType Directory -Path $testPath -Force | Out-Null
+
+            # Add an initial entry
+            Add-QuickJumpPath -Path $testPath -Alias 'preserve-initial' -ErrorAction Stop
+            Clear-PSMagicConfigCache -CacheKey 'quickjump'
+
+            # Verify initial entry exists
+            $initialPaths = Get-QuickJumpPaths
+            $initialPaths | Where-Object { $_.Alias -eq 'preserve-initial' } | Should -Not -BeNullOrEmpty
+
+            # Add more entries concurrently
+            $jobs = 1..3 | ForEach-Object {
+                Start-Job -ScriptBlock {
+                    param($CommonModulePath, $ModulePath, $Path, $Index, $ConfigHome)
+                    $env:XDG_CONFIG_HOME = $ConfigHome
+                    $env:POWERSHELL_MAGIC_NON_INTERACTIVE = '1'
+                    Import-Module $CommonModulePath -Force -Global
+                    Import-Module $ModulePath -Force
+                    Add-QuickJumpPath -Path $Path -Alias "preserve-concurrent-$Index" -ErrorAction Stop
+                } -ArgumentList $script:CommonModule, $script:QuickJumpModule, $testPath, $_, $env:XDG_CONFIG_HOME
+            }
+
+            $jobs | Wait-Job -Timeout 30 | Out-Null
+            $jobs | Remove-Job -Force
+
+            # Clear cache and verify all entries exist
+            Clear-PSMagicConfigCache -CacheKey 'quickjump'
+            $paths = Get-QuickJumpPaths
+
+            # Initial entry should still exist
+            $paths | Where-Object { $_.Alias -eq 'preserve-initial' } | Should -Not -BeNullOrEmpty -Because 'initial entry should be preserved'
+
+            # All concurrent entries should exist
+            $concurrentCount = @($paths | Where-Object { $_.Alias -like 'preserve-concurrent-*' }).Count
+            $concurrentCount | Should -Be 3 -Because 'all 3 concurrent entries should be added'
         }
     }
 }

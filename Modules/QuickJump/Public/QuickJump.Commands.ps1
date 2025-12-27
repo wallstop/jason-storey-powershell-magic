@@ -60,64 +60,74 @@ function Add-QuickJumpPath {
             return
         }
 
-        $config = Get-QuickJumpConfig
         $pathStr = $resolvedPath.Path
-
-        $existingAliasEntry = $null
-        if ($Alias) {
-            $existingAliasEntry = $config.paths | Where-Object { $_.alias -eq $Alias } | Select-Object -First 1
-            if ($existingAliasEntry -and -not $Force) {
-                Write-Host "Existing path: $($existingAliasEntry.path)" -ForegroundColor Yellow
-                throw "Alias '$Alias' already exists. Use -Force to overwrite, or choose a different alias."
-            }
-        }
-
-        $existingPathEntries = $config.paths | Where-Object { $_.path -eq $pathStr }
-        if (-not $Alias -and $existingPathEntries -and -not $Force) {
-            $aliasList = $existingPathEntries | Where-Object { $_.alias } | Select-Object -ExpandProperty alias
-            if ($aliasList) {
-                Write-Host "Existing aliases for this path: $($aliasList -join ', ')" -ForegroundColor Yellow
-            } else {
-                Write-Host 'Path already tracked without an alias.' -ForegroundColor Yellow
-            }
-            throw "Path '$pathStr' already exists. Use -Force to update the existing entry."
-        }
-
         $currentTime = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
 
-        if ($existingAliasEntry) {
-            # Update existing alias entry (when -Force supplied)
-            $existingAliasEntry.path = $pathStr
-            $existingAliasEntry.category = $Category
-            if (-not $existingAliasEntry.added) {
-                $existingAliasEntry.added = $currentTime
+        # Capture variables for use in script block
+        $capturedAlias = $Alias
+        $capturedCategory = $Category
+        $capturedForce = $Force
+        $capturedPathStr = $pathStr
+        $capturedCurrentTime = $currentTime
+
+        # Use atomic update to prevent race conditions in concurrent scenarios
+        Invoke-QuickJumpAtomicUpdate -UpdateScriptBlock {
+            param($config)
+
+            $existingAliasEntry = $null
+            if ($capturedAlias) {
+                $existingAliasEntry = $config.paths | Where-Object { $_.alias -eq $capturedAlias } | Select-Object -First 1
+                if ($existingAliasEntry -and -not $capturedForce) {
+                    Write-Host "Existing path: $($existingAliasEntry.path)" -ForegroundColor Yellow
+                    throw "Alias '$capturedAlias' already exists. Use -Force to overwrite, or choose a different alias."
+                }
             }
-            if ($null -eq $existingAliasEntry.useCount) {
-                $existingAliasEntry.useCount = 0
+
+            $existingPathEntries = $config.paths | Where-Object { $_.path -eq $capturedPathStr }
+            if (-not $capturedAlias -and $existingPathEntries -and -not $capturedForce) {
+                $aliasList = $existingPathEntries | Where-Object { $_.alias } | Select-Object -ExpandProperty alias
+                if ($aliasList) {
+                    Write-Host "Existing aliases for this path: $($aliasList -join ', ')" -ForegroundColor Yellow
+                } else {
+                    Write-Host 'Path already tracked without an alias.' -ForegroundColor Yellow
+                }
+                throw "Path '$capturedPathStr' already exists. Use -Force to update the existing entry."
             }
-            Write-Host "Updated path entry: $pathStr" -ForegroundColor Green
-        } elseif (-not $Alias -and $existingPathEntries -and $Force) {
-            $entryToUpdate = $existingPathEntries | Select-Object -First 1
-            $entryToUpdate.category = $Category
-            Write-Host "Updated path entry: $pathStr" -ForegroundColor Green
-        } else {
-            # Add new entry
-            $newEntry = @{
-                path = $pathStr
-                alias = $Alias
-                category = $Category
-                added = $currentTime
-                lastUsed = $null
-                useCount = 0
+
+            if ($existingAliasEntry) {
+                # Update existing alias entry (when -Force supplied)
+                $existingAliasEntry.path = $capturedPathStr
+                $existingAliasEntry.category = $capturedCategory
+                if (-not $existingAliasEntry.added) {
+                    $existingAliasEntry.added = $capturedCurrentTime
+                }
+                if ($null -eq $existingAliasEntry.useCount) {
+                    $existingAliasEntry.useCount = 0
+                }
+                Write-Host "Updated path entry: $capturedPathStr" -ForegroundColor Green
+            } elseif (-not $capturedAlias -and $existingPathEntries -and $capturedForce) {
+                $entryToUpdate = $existingPathEntries | Select-Object -First 1
+                $entryToUpdate.category = $capturedCategory
+                Write-Host "Updated path entry: $capturedPathStr" -ForegroundColor Green
+            } else {
+                # Add new entry
+                $newEntry = @{
+                    path = $capturedPathStr
+                    alias = $capturedAlias
+                    category = $capturedCategory
+                    added = $capturedCurrentTime
+                    lastUsed = $null
+                    useCount = 0
+                }
+                $config.paths = @($config.paths) + @($newEntry)
+                Write-Host "Added path entry: $capturedPathStr" -ForegroundColor Green
             }
-            $config.paths = @($config.paths) + @($newEntry)
-            Write-Host "Added path entry: $pathStr" -ForegroundColor Green
+
+            if ($capturedAlias) { Write-Host "  Alias: $capturedAlias" -ForegroundColor Gray }
+            if ($capturedCategory) { Write-Host "  Category: $capturedCategory" -ForegroundColor Gray }
+
+            return $config
         }
-
-        if ($Alias) { Write-Host "  Alias: $Alias" -ForegroundColor Gray }
-        if ($Category) { Write-Host "  Category: $Category" -ForegroundColor Gray }
-
-        Save-QuickJumpConfig -Config $config
     }
 }
 
