@@ -1,8 +1,8 @@
 # AI Agent Guidelines
 
-This document establishes comprehensive guidelines for AI assistants working with
-the **PowerShell Magic** repository - a collection of PowerShell modules for
-directory navigation, project templates, and Unity project management.
+This document establishes comprehensive guidelines for AI assistants working
+with the **PowerShell Magic** repository - a collection of PowerShell modules
+for directory navigation, project templates, and Unity project management.
 
 ## Repository Essentials
 
