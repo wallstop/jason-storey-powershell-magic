@@ -68,12 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.1] - 2024-09-01
 
-### Fixed
-
-- CI/CD workflow issues
-- Version tagging automation
-
-## [1.0.0] - 2024-08-15
+Initial public release.
 
 ### Added
 
@@ -113,5 +108,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [2.2.0]: https://github.com/wallstop/jason-storey-powershell-magic/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/wallstop/jason-storey-powershell-magic/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/wallstop/jason-storey-powershell-magic/compare/v1.0.1...v2.0.0
-[1.0.1]: https://github.com/wallstop/jason-storey-powershell-magic/compare/v1.0.0...v1.0.1
-[1.0.0]: https://github.com/wallstop/jason-storey-powershell-magic/releases/tag/v1.0.0
+[1.0.1]: https://github.com/wallstop/jason-storey-powershell-magic/releases/tag/v1.0.1
