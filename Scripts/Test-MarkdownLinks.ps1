@@ -64,7 +64,13 @@ function Resolve-MarkdownPath {
         return $null
     }
 
-    $pathPart = $pathPart.TrimStart()
+    $pathPart = $pathPart.TrimStart().TrimEnd('.')
+
+    # Validate and resolve base directory
+    if (-not (Test-Path -LiteralPath $BaseDirectory -PathType Container)) {
+        Write-Warning "Base directory not found: $BaseDirectory"
+        return $null
+    }
 
     $root = (Get-Item -LiteralPath $BaseDirectory).FullName
     $workspaceRoot = (Get-Location).ProviderPath
