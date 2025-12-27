@@ -50,7 +50,7 @@ and Linux:
 ### Test Architecture
 
 - **No External Dependencies**: Tests run without fzf, 7-Zip, eza, or Unity Hub
-- **Mocked Dependencies**: Where external tools are needed
+- **Mocked Dependencies**: External tools are mocked for isolated testing
 - **Syntax Validation**: PowerShell AST parsing for all scripts
 - **Module Structure**: Validates proper module organization
 - `Run-Tests.ps1` sets `POWERSHELL_MAGIC_NON_INTERACTIVE=1` and performs AST
