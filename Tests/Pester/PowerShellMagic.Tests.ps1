@@ -810,7 +810,7 @@ Describe 'PowerShell Magic - Error Conditions' -Tag 'ErrorHandling' {
             $failedJobs = @($validJobResults | Where-Object { $_.Success -eq $false })
             Write-Host "Job results: $successCount succeeded, $($failedJobs.Count) failed (of $($validJobResults.Count) valid results)" -ForegroundColor Cyan
             if ($failedJobs.Count -gt 0) {
-                Write-Host "Failed jobs:" -ForegroundColor Yellow
+                Write-Host 'Failed jobs:' -ForegroundColor Yellow
                 $failedJobs | ForEach-Object {
                     Write-Host "  Job $($_.Index): $($_.Error)" -ForegroundColor Red
                 }
