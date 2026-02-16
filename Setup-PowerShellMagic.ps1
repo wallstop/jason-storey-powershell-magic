@@ -516,20 +516,20 @@ $Dependencies = @{
         }
         PortableAssets = @{
             Windows = @{
-                Url = 'https://www.7-zip.org/a/7z2501-x64.exe'
-                Sha256 = '78AFA2A1C773CAF3CF7EDF62F857D2A8A5DA55FB0FFF5DA416074C0D28B2B55F'
+                Url = 'https://www.7-zip.org/a/7z2600-x64.exe'
+                Sha256 = '6FE18D5B3080E39678CABFA6CEF12CFB25086377389B803A36A3C43236A8A82C'
                 Executable = '7z.exe'
                 ArchiveType = 'exe'
             }
             MacOS = @{
-                Url = 'https://www.7-zip.org/a/7z2501-mac.tar.xz'
-                Sha256 = '26AA75BC262BB10BF0805617B95569C3035C2C590A99F7DB55C7E9607B2685E0'
+                Url = 'https://www.7-zip.org/a/7z2600-mac.tar.xz'
+                Sha256 = '8A2EA734B52B2CB7D568F5F13E0A137BEA3004B221BDBEE53197728A9051C849'
                 Executable = '7zz'
                 ArchiveType = 'tar.xz'
             }
             Linux = @{
-                Url = 'https://www.7-zip.org/a/7z2501-linux-x64.tar.xz'
-                Sha256 = '4CA3B7C6F2F67866B92622818B58233DC70367BE2F36B498EB0BDEAAA44B53F4'
+                Url = 'https://www.7-zip.org/a/7z2600-linux-x64.tar.xz'
+                Sha256 = 'C74DC4A48492CDE43F5FEC10D53FB2A66F520E4A62A69D630C44CB22C477EDC6'
                 Executable = '7zz'
                 ArchiveType = 'tar.xz'
             }
@@ -1617,4 +1617,5 @@ if ($ListPortableDownloads) {
 } else {
     Main
 }
+
 
