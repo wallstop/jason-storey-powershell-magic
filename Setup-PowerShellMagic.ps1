@@ -479,8 +479,8 @@ $Dependencies = @{
         TestCommand = @('fzf', '--version')
         PortableAssets = @{
             Windows = @{
-                Url = 'https://github.com/junegunn/fzf/releases/download/v0.67.0/fzf-0.67.0-windows_amd64.zip'
-                Sha256 = 'CAD95326ED416D14226A03425513B049F5BC9A41F30A355E5FE204A29E666867'
+                Url = 'https://github.com/junegunn/fzf/releases/download/v0.68.0/fzf-0.68.0-windows_amd64.zip'
+                Sha256 = '4939ED89F3A75258EA47C55C34422B6B3F28E38B85DBD1E27DC4CF5839D5D310'
                 Executable = 'fzf.exe'
                 ArchiveType = 'zip'
             }
@@ -1617,5 +1617,6 @@ if ($ListPortableDownloads) {
 } else {
     Main
 }
+
 
 
