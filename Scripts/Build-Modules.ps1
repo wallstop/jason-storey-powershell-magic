@@ -310,7 +310,8 @@ function Publish-LocalPackage {
         $existing | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
     }
 
-    $resolvedPackagesRoot = (Resolve-Path -LiteralPath $PackagesRoot -ErrorAction Stop).ProviderPath
+    $resolvedPackagesRoot = (Resolve-Path -LiteralPath $PackagesRoot -ErrorAction Stop).Path
+    Write-Host "Using local package repository path: $resolvedPackagesRoot" -ForegroundColor DarkGray
 
     Register-PSRepository -Name $repoName -SourceLocation $resolvedPackagesRoot -PublishLocation $resolvedPackagesRoot -InstallationPolicy Trusted -PackageManagementProvider 'NuGet' -ErrorAction Stop
     try {

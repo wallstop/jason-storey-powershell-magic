@@ -41,13 +41,21 @@ jobs:
         id: lint
         run: |
           pre-commit install
-          pre-commit run actionlint --all-files
-          # Run pre-commit in check-only mode (will fail if changes needed)
-          if SKIP=actionlint pre-commit run --all-files; then
+          echo "lint_failed=true" >> "$GITHUB_OUTPUT"
+
+          actionlint_exit=0
+          precommit_exit=0
+
+          pre-commit run actionlint --all-files || actionlint_exit=$?
+          SKIP=actionlint pre-commit run --all-files || precommit_exit=$?
+
+          echo "actionlint exit code: $actionlint_exit"
+          echo "pre-commit exit code (excluding actionlint): $precommit_exit"
+
+          if [ "$actionlint_exit" -eq 0 ] && [ "$precommit_exit" -eq 0 ]; then
             echo "lint_failed=false" >> "$GITHUB_OUTPUT"
             echo "Lint check passed - no fixes needed"
           else
-            echo "lint_failed=true" >> "$GITHUB_OUTPUT"
             echo "Lint check failed - fixes needed"
             exit 1
           fi
