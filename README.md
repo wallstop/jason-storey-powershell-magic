@@ -963,8 +963,9 @@ These tools enhance PowerShell Magic but aren't required:
   - Linux: `cargo install eza` or check your package manager
 
 - **Unity Hub** - Only needed for the Unitea module 🎮
-  - Install using [Unity Hub manual](https://docs.unity3d.com/hub/manual/InstallHub.html)
-    for all platforms
+  - Install using
+    [Unity Hub manual](https://docs.unity3d.com/hub/manual/InstallHub.html) for
+    all platforms
 
 **💡 Pro tip:** Run the setup script and it will help you install these
 automatically!
