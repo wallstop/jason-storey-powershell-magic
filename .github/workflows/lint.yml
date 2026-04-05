@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       lint_failed: ${{ steps.lint.outputs.lint_failed }}
+      setup_failed: ${{ steps.lint.outputs.setup_failed }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -40,23 +41,25 @@ jobs:
       - name: Run lint check (no auto-fix)
         id: lint
         run: |
-          install_exit=0
+          echo "lint_failed=false" >> "$GITHUB_OUTPUT"
+          echo "setup_failed=false" >> "$GITHUB_OUTPUT"
+
           actionlint_exit=0
           precommit_exit=0
 
-          pre-commit install || install_exit=$?
-
-          if [ "$install_exit" -eq 0 ]; then
-            pre-commit run actionlint --all-files || actionlint_exit=$?
-            SKIP=actionlint pre-commit run --all-files || precommit_exit=$?
+          if ! pre-commit install; then
+            echo "setup_failed=true" >> "$GITHUB_OUTPUT"
+            echo "::error::pre-commit install failed"
+            exit 1
           fi
 
-          if [ "$install_exit" -eq 0 ] && [ "$actionlint_exit" -eq 0 ] && [ "$precommit_exit" -eq 0 ]; then
-            echo "lint_failed=false" >> "$GITHUB_OUTPUT"
+          pre-commit run actionlint --all-files || actionlint_exit=$?
+          SKIP=actionlint pre-commit run --all-files || precommit_exit=$?
+
+          if [ "$actionlint_exit" -eq 0 ] && [ "$precommit_exit" -eq 0 ]; then
             echo "Lint check passed - no fixes needed"
           else
             echo "lint_failed=true" >> "$GITHUB_OUTPUT"
-            echo "::debug::pre-commit install exit code: $install_exit"
             echo "::debug::actionlint exit code: $actionlint_exit"
             echo "::debug::pre-commit exit code (excluding actionlint): $precommit_exit"
             echo "Lint check failed - fixes needed"
@@ -67,7 +70,7 @@ jobs:
     name: Auto-fix Lint Issues
     needs: lint-check
     # Run if lint-check failed (use always() to run even when previous job failed)
-    if: always() && needs.lint-check.outputs.lint_failed == 'true'
+    if: always() && needs.lint-check.outputs.lint_failed == 'true' && needs.lint-check.outputs.setup_failed != 'true'
     runs-on: windows-latest
     steps:
       - name: Checkout

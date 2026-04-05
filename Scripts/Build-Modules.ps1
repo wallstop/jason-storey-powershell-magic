@@ -312,7 +312,7 @@ function Publish-LocalPackage {
 
     $resolvedPackagesRoot = (Resolve-Path -LiteralPath $PackagesRoot -ErrorAction Stop).Path
 
-    Register-PSRepository -Name $repoName -SourceLocation $resolvedPackagesRoot -PublishLocation $resolvedPackagesRoot -InstallationPolicy Trusted -PackageManagementProvider 'NuGet' -ErrorAction Stop
+    Register-PSRepository -Name $repoName -SourceLocation $resolvedPackagesRoot -PublishLocation $resolvedPackagesRoot -InstallationPolicy Trusted -PackageManagementProvider 'NuGet' -ErrorAction Stop | Out-Null
     Write-Host "Registered temporary package repository '$repoName' at path: $resolvedPackagesRoot" -ForegroundColor DarkGray
     try {
         Publish-Module -Path $ModuleInfo.Path -Repository $repoName -ErrorAction Stop | Out-Null
@@ -325,7 +325,7 @@ function Publish-LocalPackage {
         throw "Failed to locate nupkg for module '$($ModuleInfo.Name)' after publishing."
     }
 
-    return $packagePath.FullName
+    return [string]$packagePath.FullName
 }
 
 function ConvertTo-NormalizedArray {
