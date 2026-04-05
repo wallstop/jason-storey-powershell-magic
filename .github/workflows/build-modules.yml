@@ -135,7 +135,6 @@ jobs:
 
           $registeredRepo = Get-PSRepository -Name LocalPackages -ErrorAction Stop
           Write-Host "Registered LocalPackages Source=$($registeredRepo.SourceLocation) Publish=$($registeredRepo.PublishLocation)" -ForegroundColor Green
-          }
 
       - name: Build Modules
         shell: pwsh
