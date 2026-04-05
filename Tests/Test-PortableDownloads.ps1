@@ -314,11 +314,15 @@ function Test-DependencyConfiguration {
                         $asset = $Dependencies['7zip'].PortableAssets[$platform]
                         # Compare Templater's executable hash against the ExecutableSha256 field in Setup.
                         # Setup.Sha256 = archive/installer download hash; ExecutableSha256 = extracted binary hash.
-                        if ($asset.ExecutableSha256) {
-                            Assert-Equal -Expected $asset.ExecutableSha256.ToUpper() -Actual $templaterHashes[$platform] `
-                                -Message "7-Zip $platform executable hash matches Templater managed hash"
-                        } else {
-                            Write-TestWarning "Setup is missing ExecutableSha256 for 7-Zip $platform - skipping executable hash validation"
+                        Assert-True -Condition (-not [string]::IsNullOrWhiteSpace($asset.ExecutableSha256)) `
+                            -Message "Setup defines ExecutableSha256 for 7-Zip $platform"
+                        if (-not [string]::IsNullOrWhiteSpace($asset.ExecutableSha256)) {
+                            Assert-True -Condition ($asset.ExecutableSha256 -match '^[0-9A-Fa-f]{64}$') `
+                                -Message "Setup defines a valid SHA256 ExecutableSha256 for 7-Zip $platform"
+                            if ($asset.ExecutableSha256 -match '^[0-9A-Fa-f]{64}$') {
+                                Assert-Equal -Expected $asset.ExecutableSha256.ToUpper() -Actual $templaterHashes[$platform] `
+                                    -Message "7-Zip $platform executable hash matches Templater managed hash"
+                            }
                         }
                     }
                 }
@@ -554,7 +558,6 @@ try {
     # Restore original location
     Set-Location $originalLocation
 }
-
 
 
 
