@@ -7,8 +7,8 @@ and related technologies.
 
 - [The PowerShell Podcast](https://powershellpodcast.podbean.com/) – community
   news and interviews.
-- [PowerShell.org Forum](https://powershell.org/forums/) – ask questions and
-  learn from experts.
+- [PowerShell Community Hub](https://aka.ms/powershell-community) – ask
+  questions and find active community channels.
 - [YouTube: PowerShell 7 for IT Professionals](https://www.youtube.com/playlist?list=PLfeA8kIs7Coc4h0yhFZmP_t2vjfAnGs4U)
 
 ## Automation & Templates

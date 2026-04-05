@@ -197,7 +197,7 @@ function Invoke-TemplateExtraction {
             $copyResult = Copy-TemplateFolder -SourcePath $Template.Path -DestinationPath $DestinationPath -Force $Force
             $result.FilesProcessed = $copyResult.CopiedFiles
             $result.DirectoriesProcessed = $copyResult.DirectoryCount
-            Write-Verbose "Template copied successfully! ($($copyResult.CopiedFiles) files, $($copyResult.DirectoryCount) directories)" -ForegroundColor Green
+            Write-Verbose "Template copied successfully! ($($copyResult.CopiedFiles) files, $($copyResult.DirectoryCount) directories)"
         }
     }
 

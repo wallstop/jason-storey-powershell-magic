@@ -95,17 +95,46 @@ jobs:
             core.setOutput('version', version);
             core.setOutput('release', release ? 'true' : 'false');
 
+      - name: Install PowerShellGet
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Install-Module PowerShellGet -Repository PSGallery -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
+          Import-Module PowerShellGet -Force -ErrorAction Stop
+          $psGetModule = Get-Module -Name PowerShellGet -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1
+          if (-not $psGetModule) {
+              throw 'PowerShellGet installation verification failed.'
+          }
+          Write-Host "Using PowerShellGet version: $($psGetModule.Version)" -ForegroundColor Green
+
       - name: Setup PowerShellGet Repository
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           $packagesRoot = Join-Path (Get-Location) 'out/packages'
           if (-not (Test-Path $packagesRoot)) {
               New-Item -ItemType Directory -Path $packagesRoot -Force | Out-Null
           }
-          Register-PSRepository -Name LocalPackages `
-            -SourceLocation $packagesRoot `
-            -PublishLocation $packagesRoot `
-            -InstallationPolicy Trusted
+          $packagesRoot = (Resolve-Path -LiteralPath $packagesRoot).Path
+          Write-Host "LocalPackages root: $packagesRoot" -ForegroundColor Cyan
+
+          $existingRepo = Get-PSRepository -Name LocalPackages -ErrorAction SilentlyContinue
+          if ($existingRepo -and ($existingRepo.SourceLocation -ne $packagesRoot -or $existingRepo.PublishLocation -ne $packagesRoot)) {
+              Write-Host "LocalPackages exists with different paths. Re-registering to: $packagesRoot" -ForegroundColor Yellow
+              Unregister-PSRepository -Name LocalPackages -ErrorAction Stop
+              $existingRepo = $null
+          }
+
+          if (-not $existingRepo) {
+              Register-PSRepository -Name LocalPackages `
+                -SourceLocation $packagesRoot `
+                -PublishLocation $packagesRoot `
+                -InstallationPolicy Trusted `
+                -ErrorAction Stop
+          }
+
+          $registeredRepo = Get-PSRepository -Name LocalPackages -ErrorAction Stop
+          Write-Host "Registered LocalPackages Source=$($registeredRepo.SourceLocation) Publish=$($registeredRepo.PublishLocation)" -ForegroundColor Green
 
       - name: Build Modules
         shell: pwsh
@@ -124,7 +153,7 @@ jobs:
             -PackageRoot .\out\packages
 
       - name: Upload Packages
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: module-packages
           path: out/packages/*.nupkg
