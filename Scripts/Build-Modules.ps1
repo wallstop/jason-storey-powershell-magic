@@ -317,7 +317,7 @@ function Publish-LocalPackage {
     try {
         Publish-Module -Path $ModuleInfo.Path -Repository $repoName -ErrorAction Stop | Out-Null
     } finally {
-        Unregister-PSRepository -Name $repoName -ErrorAction SilentlyContinue
+        Unregister-PSRepository -Name $repoName -ErrorAction SilentlyContinue | Out-Null
     }
 
     $packagePath = Get-ChildItem -Path $PackagesRoot -Recurse -Filter '*.nupkg' -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($ModuleInfo.Name).*" } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
