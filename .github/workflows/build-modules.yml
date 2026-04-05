@@ -21,9 +21,6 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    env:
-      PSCACHE_PATH: ${{ runner.temp }}\ps-cache
-      PSGALLERY_APIKEY: ${{ secrets.PSGALLERY_APIKEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6

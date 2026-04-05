@@ -88,6 +88,13 @@ repos:
         args: ['--quiet', '--config', '.markdown-link-check.json']
         files: '\.(md|markdown)$'
 
+  # GitHub Actions workflow validation
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+        args: ['-color']
+
 # Global configuration
 default_stages: [pre-commit]
 fail_fast: false

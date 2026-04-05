@@ -28,7 +28,7 @@ jobs:
           python-version: '3.x'
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
@@ -43,10 +43,10 @@ jobs:
           pre-commit install
           # Run pre-commit in check-only mode (will fail if changes needed)
           if pre-commit run --all-files; then
-            echo "lint_failed=false" >> $GITHUB_OUTPUT
+            echo "lint_failed=false" >> "$GITHUB_OUTPUT"
             echo "Lint check passed - no fixes needed"
           else
-            echo "lint_failed=true" >> $GITHUB_OUTPUT
+            echo "lint_failed=true" >> "$GITHUB_OUTPUT"
             echo "Lint check failed - fixes needed"
             exit 1
           fi
@@ -71,7 +71,7 @@ jobs:
           python-version: '3.x'
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
