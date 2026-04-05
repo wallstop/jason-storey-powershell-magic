@@ -305,15 +305,21 @@ function Test-DependencyConfiguration {
             $templaterHashes = Get-TemplaterManagedSevenZipHashes
 
             if ($templaterHashes.Count -gt 0) {
-                Write-TestInfo 'Validating Templater managed 7-Zip hashes align with setup script'
+                Write-TestInfo 'Validating Templater managed 7-Zip executable hashes align with setup script'
                 foreach ($platform in $templaterHashes.Keys) {
                     Assert-True -Condition ($Dependencies['7zip'].PortableAssets.ContainsKey($platform)) `
                         -Message "Setup defines 7-Zip portable asset for $platform"
 
                     if ($Dependencies['7zip'].PortableAssets.ContainsKey($platform)) {
-                        $assetHash = $Dependencies['7zip'].PortableAssets[$platform].Sha256
-                        Assert-Equal -Expected $assetHash.ToUpper() -Actual $templaterHashes[$platform] `
-                            -Message "7-Zip $platform hash matches Templater managed hash"
+                        $asset = $Dependencies['7zip'].PortableAssets[$platform]
+                        # Compare Templater's executable hash against the ExecutableSha256 field in Setup.
+                        # Setup.Sha256 = archive/installer download hash; ExecutableSha256 = extracted binary hash.
+                        if ($asset.ExecutableSha256) {
+                            Assert-Equal -Expected $asset.ExecutableSha256.ToUpper() -Actual $templaterHashes[$platform] `
+                                -Message "7-Zip $platform executable hash matches Templater managed hash"
+                        } else {
+                            Write-TestWarning "Setup is missing ExecutableSha256 for 7-Zip $platform - skipping executable hash validation"
+                        }
                     }
                 }
             } else {

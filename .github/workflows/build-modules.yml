@@ -95,6 +95,12 @@ jobs:
             core.setOutput('version', version);
             core.setOutput('release', release ? 'true' : 'false');
 
+      - name: Install PowerShellGet
+        shell: pwsh
+        run: |
+          Install-Module PowerShellGet -Scope CurrentUser -Force -AllowClobber
+          Import-Module PowerShellGet -Force
+
       - name: Setup PowerShellGet Repository
         shell: pwsh
         run: |
@@ -102,10 +108,12 @@ jobs:
           if (-not (Test-Path $packagesRoot)) {
               New-Item -ItemType Directory -Path $packagesRoot -Force | Out-Null
           }
-          Register-PSRepository -Name LocalPackages `
-            -SourceLocation $packagesRoot `
-            -PublishLocation $packagesRoot `
-            -InstallationPolicy Trusted
+          if (-not (Get-PSRepository -Name LocalPackages -ErrorAction SilentlyContinue)) {
+              Register-PSRepository -Name LocalPackages `
+                -SourceLocation $packagesRoot `
+                -PublishLocation $packagesRoot `
+                -InstallationPolicy Trusted
+          }
 
       - name: Build Modules
         shell: pwsh

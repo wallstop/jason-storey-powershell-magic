@@ -1,3 +1,6 @@
+# Build artifacts
+out/
+
 # Pester artifacts
 Tests/Pester/coverage*.xml
 Tests/Pester/coverage*.html
