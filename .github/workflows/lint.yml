@@ -41,8 +41,9 @@ jobs:
         id: lint
         run: |
           pre-commit install
+          pre-commit run actionlint --all-files
           # Run pre-commit in check-only mode (will fail if changes needed)
-          if pre-commit run --all-files; then
+          if SKIP=actionlint pre-commit run --all-files; then
             echo "lint_failed=false" >> "$GITHUB_OUTPUT"
             echo "Lint check passed - no fixes needed"
           else
