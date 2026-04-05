@@ -311,9 +311,9 @@ function Publish-LocalPackage {
     }
 
     $resolvedPackagesRoot = (Resolve-Path -LiteralPath $PackagesRoot -ErrorAction Stop).Path
-    Write-Host "Using local package repository path: $resolvedPackagesRoot" -ForegroundColor DarkGray
 
     Register-PSRepository -Name $repoName -SourceLocation $resolvedPackagesRoot -PublishLocation $resolvedPackagesRoot -InstallationPolicy Trusted -PackageManagementProvider 'NuGet' -ErrorAction Stop
+    Write-Host "Registered temporary package repository '$repoName' at path: $resolvedPackagesRoot" -ForegroundColor DarkGray
     try {
         Publish-Module -Path $ModuleInfo.Path -Repository $repoName -ErrorAction Stop | Out-Null
     } finally {
