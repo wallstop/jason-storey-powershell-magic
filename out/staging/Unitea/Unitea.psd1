@@ -1,6 +1,6 @@
 @{
     RootModule = 'Unitea.psm1'
-    ModuleVersion = '2.2.0'
+    ModuleVersion = '1.0.0'
     GUID = 'a1b2c3d4-e5f6-1190-1234-567a90abcdef'
     Author = 'Jason Storey'
     Description = 'Utility functions for Unity Projects'
@@ -22,7 +22,7 @@
             Tags = @('Unity', 'ProjectManagement', 'FZF')
             ProjectUri = 'https://github.com/wallstop/jason-storey-powershell-magic'
             LicenseUri = 'https://opensource.org/licenses/MIT'
-            ReleaseNotes = 'Modularization, optimizations, and better path handling.'
+            ReleaseNotes = 'Updates included in version 1.0.0.'
         }
     }
 }

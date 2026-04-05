@@ -1,6 +1,6 @@
 @{
     RootModule = 'Templater.psm1'
-    ModuleVersion = '2.2.0'
+    ModuleVersion = '1.0.0'
     GUID = 'a1b2d3d4-e55f-7890-1234-567890abcdef'
     Author = 'Jason Storey'
     Description = 'Register and Restore Templates'
@@ -41,7 +41,7 @@
             Tags = @('template', '7zip', 'workflow', 'fzf', 'starter', 'project')
             LicenseUri = 'https://opensource.org/licenses/MIT'
             ProjectUri = 'https://github.com/wallstop/jason-storey-powershell-magic'
-            ReleaseNotes = 'Modularization, optimizations, and better path handling.'
+            ReleaseNotes = 'Updates included in version 1.0.0.'
         }
     }
 }

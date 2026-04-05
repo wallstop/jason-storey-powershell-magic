@@ -1,0 +1,104 @@
+[
+  {
+    "Name": "QuickJump",
+    "Version": "1.0.0",
+    "PackagePath": "/home/runner/work/jason-storey-powershell-magic/jason-storey-powershell-magic/out/packages/QuickJump.1.0.0.nupkg",
+    "PackageHashSha256": "28C7FCD089F62ED0B9715EBB9BFDEE02DB20F1D066FB64A80C409BB6FD21106E",
+    "FunctionsToExport": [
+      "Add-QuickJumpPath",
+      "Remove-QuickJumpPath",
+      "Get-QuickJumpPaths",
+      "Invoke-QuickJump",
+      "Invoke-QuickJumpCategory",
+      "Get-QuickJumpCategories",
+      "Open-QuickJumpRecent",
+      "Get-QuickJumpConfigPath"
+    ],
+    "AliasesToExport": [
+      "qj",
+      "qja",
+      "qjr",
+      "qjl",
+      "qjc",
+      "qjrecent"
+    ],
+    "Tags": [
+      "Navigation",
+      "Directory",
+      "Jump",
+      "FZF",
+      "Productivity"
+    ],
+    "ReleaseNotes": "Updates included in version 1.0.0.",
+    "ManifestPath": "/home/runner/work/jason-storey-powershell-magic/jason-storey-powershell-magic/out/staging/QuickJump/QuickJump.psd1"
+  },
+  {
+    "Name": "Templater",
+    "Version": "1.0.0",
+    "PackagePath": "/home/runner/work/jason-storey-powershell-magic/jason-storey-powershell-magic/out/packages/Templater.1.0.0.nupkg",
+    "PackageHashSha256": "652681BAEF18D100C76554D5567A15C8A7DC329365922FD12BBF99B9A46FC389",
+    "FunctionsToExport": [
+      "Add-Template",
+      "Get-Templates",
+      "Use-Template",
+      "Remove-Template",
+      "Update-Template",
+      "Export-Templates",
+      "Import-Templates",
+      "Get-TemplateStats",
+      "Get-TemplaterConfigPath"
+    ],
+    "AliasesToExport": [
+      "templates",
+      "template",
+      "tpl",
+      "use-tpl",
+      "add-tpl",
+      "remove-tpl"
+    ],
+    "Tags": [
+      "template",
+      "7zip",
+      "workflow",
+      "fzf",
+      "starter",
+      "project"
+    ],
+    "ReleaseNotes": "Updates included in version 1.0.0.",
+    "ManifestPath": "/home/runner/work/jason-storey-powershell-magic/jason-storey-powershell-magic/out/staging/Templater/Templater.psd1"
+  },
+  {
+    "Name": "Unitea",
+    "Version": "1.0.0",
+    "PackagePath": "/home/runner/work/jason-storey-powershell-magic/jason-storey-powershell-magic/out/packages/Unitea.1.0.0.nupkg",
+    "PackageHashSha256": "3A9678F49AF27D80352636FC49DA2DFB8AC066F20470810FD85412BB2DE55516",
+    "FunctionsToExport": [
+      "Open-UnityProject",
+      "Add-UnityProject",
+      "Update-UnityProject",
+      "Get-UnityProjectSyncStatus",
+      "Invoke-UniteaStartupSyncCheck",
+      "Get-UnityProjects",
+      "Remove-UnityProject",
+      "Open-RecentUnityProject",
+      "Get-UnityConfigPath"
+    ],
+    "AliasesToExport": [
+      "unity",
+      "unity-add",
+      "unity-update",
+      "unity-check",
+      "unity-list",
+      "unity-remove",
+      "unity-recent",
+      "unity-config"
+    ],
+    "Tags": [
+      "Unity",
+      "ProjectManagement",
+      "FZF"
+    ],
+    "ReleaseNotes": "Updates included in version 1.0.0.",
+    "ManifestPath": "/home/runner/work/jason-storey-powershell-magic/jason-storey-powershell-magic/out/staging/Unitea/Unitea.psd1"
+  }
+]
