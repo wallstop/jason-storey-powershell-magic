@@ -81,6 +81,8 @@ jobs:
     name: Build Modules
     needs: test
     runs-on: windows-latest
+    env:
+      HAS_PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -107,12 +109,19 @@ jobs:
             ${{ env.BUILD_OUTPUT_DIR }}/packages/*.nupkg
             ${{ env.BUILD_OUTPUT_DIR }}/packages/module-metadata.json
 
+      - name: Publish diagnostics
+        if: github.event_name == 'release' && github.event.action == 'published'
+        shell: pwsh
+        run: |
+          Write-Host "Release publish event detected." -ForegroundColor Cyan
+          Write-Host "PSGallery API key configured: $env:HAS_PSGALLERY_API_KEY" -ForegroundColor Cyan
+
       - name: Publish to PowerShell Gallery
-        if: github.event_name == 'release' && github.event.action == 'published' && secrets.PSGALLERY_API_KEY != ''
+        if: github.event_name == 'release' && github.event.action == 'published' && env.HAS_PSGALLERY_API_KEY == 'true'
+        env:
+          PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
         run: |
           Get-ChildItem -Path $env:BUILD_OUTPUT_DIR/packages/*.nupkg | ForEach-Object {
             Publish-Module -Path $_.FullName -Repository PSGallery -NuGetApiKey $env:PSGALLERY_API_KEY
           }
         shell: pwsh
-        env:
-          PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}

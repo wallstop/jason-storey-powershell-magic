@@ -99,6 +99,7 @@ jobs:
         Write-Host "Updated version.txt to: $newVersion"
 
     - name: Create release archive
+      id: create-release
       shell: pwsh
       run: |
         $version = '${{ steps.version.outputs.NEW_VERSION }}'

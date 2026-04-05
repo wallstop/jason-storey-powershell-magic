@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       lint_failed: ${{ steps.lint.outputs.lint_failed }}
+      setup_failed: ${{ steps.lint.outputs.setup_failed }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -28,7 +29,7 @@ jobs:
           python-version: '3.x'
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
@@ -40,13 +41,27 @@ jobs:
       - name: Run lint check (no auto-fix)
         id: lint
         run: |
-          pre-commit install
-          # Run pre-commit in check-only mode (will fail if changes needed)
-          if pre-commit run --all-files; then
-            echo "lint_failed=false" >> $GITHUB_OUTPUT
+          echo "lint_failed=false" >> "$GITHUB_OUTPUT"
+          echo "setup_failed=false" >> "$GITHUB_OUTPUT"
+
+          actionlint_exit=0
+          precommit_exit=0
+
+          if ! pre-commit install; then
+            echo "setup_failed=true" >> "$GITHUB_OUTPUT"
+            echo "::error::pre-commit install failed"
+            exit 1
+          fi
+
+          pre-commit run actionlint --all-files || actionlint_exit=$?
+          SKIP=actionlint pre-commit run --all-files || precommit_exit=$?
+
+          if [ "$actionlint_exit" -eq 0 ] && [ "$precommit_exit" -eq 0 ]; then
             echo "Lint check passed - no fixes needed"
           else
-            echo "lint_failed=true" >> $GITHUB_OUTPUT
+            echo "lint_failed=true" >> "$GITHUB_OUTPUT"
+            echo "::debug::actionlint exit code: $actionlint_exit"
+            echo "::debug::pre-commit exit code (excluding actionlint): $precommit_exit"
             echo "Lint check failed - fixes needed"
             exit 1
           fi
@@ -55,7 +70,7 @@ jobs:
     name: Auto-fix Lint Issues
     needs: lint-check
     # Run if lint-check failed (use always() to run even when previous job failed)
-    if: always() && needs.lint-check.outputs.lint_failed == 'true'
+    if: always() && needs.lint-check.outputs.lint_failed == 'true' && needs.lint-check.outputs.setup_failed != 'true'
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -71,7 +86,7 @@ jobs:
           python-version: '3.x'
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
@@ -110,7 +125,6 @@ jobs:
         if: steps.fix.outputs.changes == 'true' && !(github.actor == github.repository_owner || github.actor == 'dependabot[bot]')
         env:
           TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $ErrorActionPreference = 'Stop'

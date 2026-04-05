@@ -310,13 +310,14 @@ function Publish-LocalPackage {
         $existing | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
     }
 
-    $resolvedPackagesRoot = (Resolve-Path -LiteralPath $PackagesRoot -ErrorAction Stop).ProviderPath
+    $resolvedPackagesRoot = (Resolve-Path -LiteralPath $PackagesRoot -ErrorAction Stop).Path
 
-    Register-PSRepository -Name $repoName -SourceLocation $resolvedPackagesRoot -PublishLocation $resolvedPackagesRoot -InstallationPolicy Trusted -PackageManagementProvider 'NuGet' -ErrorAction Stop
+    Register-PSRepository -Name $repoName -SourceLocation $resolvedPackagesRoot -PublishLocation $resolvedPackagesRoot -InstallationPolicy Trusted -PackageManagementProvider 'NuGet' -ErrorAction Stop | Out-Null
+    Write-Host "Registered temporary package repository '$repoName' at path: $resolvedPackagesRoot" -ForegroundColor DarkGray
     try {
         Publish-Module -Path $ModuleInfo.Path -Repository $repoName -ErrorAction Stop | Out-Null
     } finally {
-        Unregister-PSRepository -Name $repoName -ErrorAction SilentlyContinue
+        Unregister-PSRepository -Name $repoName -ErrorAction SilentlyContinue | Out-Null
     }
 
     $packagePath = Get-ChildItem -Path $PackagesRoot -Recurse -Filter '*.nupkg' -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$($ModuleInfo.Name).*" } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
@@ -324,7 +325,7 @@ function Publish-LocalPackage {
         throw "Failed to locate nupkg for module '$($ModuleInfo.Name)' after publishing."
     }
 
-    return $packagePath.FullName
+    return [string]$packagePath.FullName
 }
 
 function ConvertTo-NormalizedArray {
