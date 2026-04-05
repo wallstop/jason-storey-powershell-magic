@@ -111,7 +111,6 @@ jobs:
         if: steps.fix.outputs.changes == 'true' && !(github.actor == github.repository_owner || github.actor == 'dependabot[bot]')
         env:
           TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $ErrorActionPreference = 'Stop'
