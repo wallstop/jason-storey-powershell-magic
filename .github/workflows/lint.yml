@@ -40,22 +40,25 @@ jobs:
       - name: Run lint check (no auto-fix)
         id: lint
         run: |
-          pre-commit install
-          echo "lint_failed=true" >> "$GITHUB_OUTPUT"
-
+          install_exit=0
           actionlint_exit=0
           precommit_exit=0
 
-          pre-commit run actionlint --all-files || actionlint_exit=$?
-          SKIP=actionlint pre-commit run --all-files || precommit_exit=$?
+          pre-commit install || install_exit=$?
 
-          echo "actionlint exit code: $actionlint_exit"
-          echo "pre-commit exit code (excluding actionlint): $precommit_exit"
+          if [ "$install_exit" -eq 0 ]; then
+            pre-commit run actionlint --all-files || actionlint_exit=$?
+            SKIP=actionlint pre-commit run --all-files || precommit_exit=$?
+          fi
 
-          if [ "$actionlint_exit" -eq 0 ] && [ "$precommit_exit" -eq 0 ]; then
+          if [ "$install_exit" -eq 0 ] && [ "$actionlint_exit" -eq 0 ] && [ "$precommit_exit" -eq 0 ]; then
             echo "lint_failed=false" >> "$GITHUB_OUTPUT"
             echo "Lint check passed - no fixes needed"
           else
+            echo "lint_failed=true" >> "$GITHUB_OUTPUT"
+            echo "::debug::pre-commit install exit code: $install_exit"
+            echo "::debug::actionlint exit code: $actionlint_exit"
+            echo "::debug::pre-commit exit code (excluding actionlint): $precommit_exit"
             echo "Lint check failed - fixes needed"
             exit 1
           fi
