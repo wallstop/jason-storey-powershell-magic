@@ -566,10 +566,14 @@ function Test-DependencyUpdates {
             if ($needsUpdate) {
                 $platformUpdates = @{}
                 $allHashesResolved = $true
+                $incompletePlatforms = @()
+                $failedHashPlatforms = @()
 
                 foreach ($platform in $latestAssets.Keys) {
                     if (-not $currentAssets.ContainsKey($platform)) {
-                        Write-WarningMessage "No current asset metadata for $($updater.Name) [$platform]; skipping update for this platform."
+                        Write-ErrorMessage "No current asset metadata for $($updater.Name) [$platform]; cannot safely apply partial update."
+                        $allHashesResolved = $false
+                        $incompletePlatforms += $platform
                         continue
                     }
 
@@ -577,14 +581,17 @@ function Test-DependencyUpdates {
                     $latestAsset = $latestAssets[$platform]
 
                     if (-not $latestAsset.Url) {
-                        Write-WarningMessage "No download URL available for $($updater.Name) [$platform]; skipping."
+                        Write-ErrorMessage "No download URL available for $($updater.Name) [$platform]; cannot safely apply partial update."
+                        $allHashesResolved = $false
+                        $incompletePlatforms += $platform
                         continue
                     }
 
                     $newHash = Get-FileHash-Remote -Url $latestAsset.Url -DependencyName "$($updater.Name) [$platform]"
                     if (-not $newHash) {
                         $allHashesResolved = $false
-                        break
+                        $failedHashPlatforms += $platform
+                        continue
                     }
 
                     $platformUpdates[$platform] = @{
@@ -606,7 +613,15 @@ function Test-DependencyUpdates {
                     $summary += "- $($updater.Name): $($currentDep.Version) -> $latestVersion"
                     Write-Success "$($updater.Name) update available: $($currentDep.Version) -> $latestVersion"
                 } elseif (-not $allHashesResolved) {
-                    Write-ErrorMessage "Failed to verify new downloads for $($updater.Name); update aborted."
+                    $incompletePlatforms = @($incompletePlatforms | Sort-Object -Unique)
+                    $failedHashPlatforms = @($failedHashPlatforms | Sort-Object -Unique)
+                    if ($incompletePlatforms.Count -gt 0) {
+                        Write-ErrorMessage "$($updater.Name) update incomplete for platforms: $($incompletePlatforms -join ', ')"
+                    }
+                    if ($failedHashPlatforms.Count -gt 0) {
+                        Write-ErrorMessage "$($updater.Name) hash verification failed for platforms: $($failedHashPlatforms -join ', ')"
+                    }
+                    Write-ErrorMessage "Failed to verify complete metadata for $($updater.Name); update aborted."
                 } else {
                     Write-Success "$($updater.Name) is up to date"
                 }
@@ -658,6 +673,7 @@ function Update-SetupScript {
     $templaterModulePath = Join-Path $PSScriptRoot '..\Modules\Templater\Templater.psm1'
     $templaterContent = $null
     $templaterUpdated = $false
+    $templaterUpdateFailed = $false
 
     foreach ($depKey in $Updates.Keys) {
         $update = $Updates[$depKey]
@@ -708,10 +724,15 @@ function Update-SetupScript {
                     $templaterUpdated = $true
                     Write-Info "Updated Templater managed 7-Zip hash for $platform"
                 } else {
-                    Write-Warning "Failed to update managed 7-Zip hash for $platform in Templater module automatically."
+                    Write-HostError "Failed to update managed 7-Zip hash for $platform in Templater module automatically."
+                    $templaterUpdateFailed = $true
                 }
             }
         }
+    }
+
+    if ($templaterUpdateFailed) {
+        throw 'Failed to update all managed 7-Zip hashes in Modules/Templater/Templater.psm1.'
     }
 
     # Write updated content
@@ -785,6 +806,3 @@ if ($MyInvocation.InvocationName -ne '.') {
     # Run main function when executed normally (not dot-sourced)
     Main
 }
-
-
-

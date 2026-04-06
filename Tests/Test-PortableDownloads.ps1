@@ -306,9 +306,18 @@ function Test-DependencyConfiguration {
 
             if ($templaterHashes.Count -gt 0) {
                 Write-TestInfo 'Validating Templater managed 7-Zip executable hashes align with setup script'
-                foreach ($platform in $templaterHashes.Keys) {
+                $expectedPlatforms = @('Windows', 'MacOS', 'Linux')
+
+                foreach ($platform in $expectedPlatforms) {
+                    Assert-True -Condition ($templaterHashes.ContainsKey($platform)) `
+                        -Message "Templater managed hash contains $platform"
                     Assert-True -Condition ($Dependencies['7zip'].PortableAssets.ContainsKey($platform)) `
                         -Message "Setup defines 7-Zip portable asset for $platform"
+
+                    if ($templaterHashes.ContainsKey($platform)) {
+                        Assert-True -Condition ($templaterHashes[$platform] -match '^[0-9A-F]{64}$') `
+                            -Message "Templater managed hash for $platform is valid SHA256"
+                    }
 
                     if ($Dependencies['7zip'].PortableAssets.ContainsKey($platform)) {
                         $asset = $Dependencies['7zip'].PortableAssets[$platform]
@@ -319,7 +328,7 @@ function Test-DependencyConfiguration {
                         if (-not [string]::IsNullOrWhiteSpace($asset.ExecutableSha256)) {
                             Assert-True -Condition ($asset.ExecutableSha256 -match '^[0-9A-Fa-f]{64}$') `
                                 -Message "Setup defines a valid SHA256 ExecutableSha256 for 7-Zip $platform"
-                            if ($asset.ExecutableSha256 -match '^[0-9A-Fa-f]{64}$') {
+                            if (($asset.ExecutableSha256 -match '^[0-9A-Fa-f]{64}$') -and $templaterHashes.ContainsKey($platform)) {
                                 Assert-Equal -Expected $asset.ExecutableSha256.ToUpper() -Actual $templaterHashes[$platform] `
                                     -Message "7-Zip $platform executable hash matches Templater managed hash"
                             }
@@ -558,6 +567,3 @@ try {
     # Restore original location
     Set-Location $originalLocation
 }
-
-
-

@@ -1158,6 +1158,51 @@ if (Test-Path (Join-Path \$DeployPath 'sample.txt')) { Write-Output 'SUCCESS' } 
                     Assert-True -Condition ($postUpdateTemplater -match "$platform\s*=\s*'$($platformUpdate.NewHash)'") -Message "Dependency updater synchronises managed 7-Zip hash for $platform in templater module copy"
                 }
 
+                $partialUpdateGuardResult = & {
+                    param($scriptPath, $currentAssetData)
+
+                    . $scriptPath
+
+                    $script:DependencyUpdaters = @{
+                        '7zip' = @{
+                            Name = '7-Zip'
+                            GetLatestVersion = { '9999' }
+                            BuildPortableAssets = {
+                                param($Version)
+                                return @{
+                                    Windows = @{ Url = 'https://example.invalid/7z2600-x64.exe' }
+                                    MacOS = @{ Url = 'https://example.invalid/7z2600-mac.tar.xz' }
+                                    Linux = @{ Url = 'https://example.invalid/7z2600-linux-x64.tar.xz' }
+                                }
+                            }
+                        }
+                    }
+
+                    Set-DependencyHttpInvoker -WebRequest {
+                        param($parameters)
+                        throw 'Simulated hash download failure for partial update guard test'
+                    }
+
+                    function script:Get-CurrentDependencies {
+                        return @{
+                            '7zip' = @{
+                                Version = '2501'
+                                PortableAssets = @{
+                                    Windows = @{ Url = $currentAssetData.Windows.Url; SHA256 = $currentAssetData.Windows.Hash }
+                                    MacOS = @{ Url = $currentAssetData.MacOS.Url; SHA256 = $currentAssetData.MacOS.Hash }
+                                    Linux = @{ Url = $currentAssetData.Linux.Url; SHA256 = $currentAssetData.Linux.Hash }
+                                }
+                            }
+                        }
+                    }
+
+                    $updates = Test-DependencyUpdates
+                    Set-DependencyHttpInvoker -Reset
+                    return $updates
+                } -scriptPath $scriptCopyPath -currentAssetData $currentAssets
+
+                Assert-Equal -Expected 0 -Actual $partialUpdateGuardResult.Count -Message 'Dependency updater rejects partial hash resolution and returns no updates'
+
                 $githubFallback = & {
                     param($scriptPath)
                     . $scriptPath
@@ -2009,6 +2054,3 @@ try {
     # Restore original location
     Set-Location $originalLocation
 }
-
-
-

@@ -92,10 +92,29 @@ jobs:
       if: steps.check-updates.outputs.updates-available == 'true'
       shell: pwsh
       run: |
-        git add Setup-PowerShellMagic.ps1
+        git add Setup-PowerShellMagic.ps1 Modules/Templater/Templater.psm1
+
+        if (git diff --cached --quiet) {
+          Write-Error "No dependency metadata changes detected to commit"
+          exit 1
+        }
+
+        $summaryContent = Get-Content -Path "dependency-update-summary.txt" -Raw
+        $summaryLines = $summaryContent -split "`r?`n"
+        $sevenZipUpdated = [bool]($summaryLines | Select-String -SimpleMatch "- 7-Zip:")
+        $templaterChanged = [bool](git diff --cached --name-only | Select-String -SimpleMatch "Modules/Templater/Templater.psm1")
+
+        if ($sevenZipUpdated -and -not $templaterChanged) {
+          Write-Error "7-Zip update detected but Modules/Templater/Templater.psm1 was not updated"
+          exit 1
+        }
+
+        if (-not $sevenZipUpdated -and $templaterChanged) {
+          Write-Error "Modules/Templater/Templater.psm1 changed without a 7-Zip update"
+          exit 1
+        }
 
         # Create commit message
-        $summaryContent = Get-Content -Path "dependency-update-summary.txt" -Raw
         $commitMessage = "chore: update dependencies to latest versions`n`n$summaryContent`n`nGenerated with Claude Code`n`nCo-Authored-By: Claude <noreply@anthropic.com>"
 
         git commit -m $commitMessage
