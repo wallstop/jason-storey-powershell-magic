@@ -11,7 +11,7 @@ and this project adheres to
 ### Changed
 
 - Updated fzf to v0.71.0
-- Updated 7-Zip to 23.01
+- Updated 7-Zip to 26.00
 
 ### Added
 
