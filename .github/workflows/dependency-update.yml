@@ -100,7 +100,8 @@ jobs:
         }
 
         $summaryContent = Get-Content -Path "dependency-update-summary.txt" -Raw
-        $sevenZipUpdated = $summaryContent -match '(?im)^\s*-\s*7-Zip:'
+        $summaryLines = Get-Content -Path "dependency-update-summary.txt"
+        $sevenZipUpdated = [bool]($summaryLines | Select-String -SimpleMatch "- 7-Zip:")
         $templaterChanged = [bool](git diff --cached --name-only | Select-String -SimpleMatch "Modules/Templater/Templater.psm1")
 
         if ($sevenZipUpdated -and -not $templaterChanged) {
