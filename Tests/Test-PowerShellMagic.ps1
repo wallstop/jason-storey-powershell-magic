@@ -1166,7 +1166,7 @@ if (Test-Path (Join-Path \$DeployPath 'sample.txt')) { Write-Output 'SUCCESS' } 
                     $script:DependencyUpdaters = @{
                         '7zip' = @{
                             Name = '7-Zip'
-                            GetLatestVersion = { '2600' }
+                            GetLatestVersion = { '9999' }
                             BuildPortableAssets = {
                                 param($Version)
                                 return @{
@@ -2054,4 +2054,3 @@ try {
     # Restore original location
     Set-Location $originalLocation
 }
-

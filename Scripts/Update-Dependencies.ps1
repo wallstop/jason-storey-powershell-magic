@@ -603,13 +603,7 @@ function Test-DependencyUpdates {
                     }
                 }
 
-                $missingPlatformUpdates = @($expectedPlatforms | Where-Object { -not $platformUpdates.ContainsKey($_) })
-                if ($missingPlatformUpdates.Count -gt 0) {
-                    $allHashesResolved = $false
-                    $incompletePlatforms += $missingPlatformUpdates
-                }
-
-                if ($allHashesResolved -and $platformUpdates.Count -gt 0 -and $platformUpdates.Count -eq $expectedPlatforms.Count) {
+                if ($allHashesResolved -and $platformUpdates.Count -gt 0) {
                     $updatesAvailable[$depKey] = @{
                         Name = $updater.Name
                         CurrentVersion = $currentDep.Version
@@ -813,4 +807,3 @@ if ($MyInvocation.InvocationName -ne '.') {
     # Run main function when executed normally (not dot-sourced)
     Main
 }
-
