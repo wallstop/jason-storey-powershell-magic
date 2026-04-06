@@ -8,6 +8,11 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- Updated fzf to v0.71.0
+- Updated 7-Zip to 23.01
+
 ### Added
 
 - In-memory configuration caching with automatic invalidation for faster repeat
