@@ -658,6 +658,7 @@ function Update-SetupScript {
     $templaterModulePath = Join-Path $PSScriptRoot '..\Modules\Templater\Templater.psm1'
     $templaterContent = $null
     $templaterUpdated = $false
+    $templaterUpdateFailed = $false
 
     foreach ($depKey in $Updates.Keys) {
         $update = $Updates[$depKey]
@@ -708,10 +709,15 @@ function Update-SetupScript {
                     $templaterUpdated = $true
                     Write-Info "Updated Templater managed 7-Zip hash for $platform"
                 } else {
-                    Write-Warning "Failed to update managed 7-Zip hash for $platform in Templater module automatically."
+                    Write-HostError "Failed to update managed 7-Zip hash for $platform in Templater module automatically."
+                    $templaterUpdateFailed = $true
                 }
             }
         }
+    }
+
+    if ($templaterUpdateFailed) {
+        throw 'Failed to update all managed 7-Zip hashes in Modules/Templater/Templater.psm1.'
     }
 
     # Write updated content
@@ -785,6 +791,5 @@ if ($MyInvocation.InvocationName -ne '.') {
     # Run main function when executed normally (not dot-sourced)
     Main
 }
-
 
 
