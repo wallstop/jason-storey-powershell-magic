@@ -1180,7 +1180,7 @@ if (Test-Path (Join-Path \$DeployPath 'sample.txt')) { Write-Output 'SUCCESS' } 
 
                     Set-DependencyHttpInvoker -WebRequest {
                         param($parameters)
-                        throw 'Mocked download failure'
+                        throw 'Simulated hash download failure for partial update guard test'
                     }
 
                     function script:Get-CurrentDependencies {

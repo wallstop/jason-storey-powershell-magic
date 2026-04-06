@@ -566,7 +566,6 @@ function Test-DependencyUpdates {
             if ($needsUpdate) {
                 $platformUpdates = @{}
                 $allHashesResolved = $true
-                $expectedPlatforms = @($latestAssets.Keys)
                 $incompletePlatforms = @()
                 $failedHashPlatforms = @()
 
