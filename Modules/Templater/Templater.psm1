@@ -22,9 +22,9 @@ $script:CurrentPlatform = if ($script:IsWindows) {
 }
 $script:SevenZipWarningEmitted = $false
 $script:ManagedSevenZipHashes = @{
-    Windows = '78AFA2A1C773CAF3CF7EDF62F857D2A8A5DA55FB0FFF5DA416074C0D28B2B55F'
-    MacOS = '26AA75BC262BB10BF0805617B95569C3035C2C590A99F7DB55C7E9607B2685E0'
-    Linux = '4CA3B7C6F2F67866B92622818B58233DC70367BE2F36B498EB0BDEAAA44B53F4'
+    Windows = '26CB6E9F56333682122FAFE79DBCDFD51E9F47CC7217DCCD29AC6FC33B5598CD'
+    MacOS = '343EAE9CCBBD8F68320ADAAA3C87E0244CF39FAD0FBEC6B9D2CD3E5B0F8A5FBF'
+    Linux = '23BABCAB045B78016E443F862363E4AB63C77D75BC715C0B3463F6134CBCF318'
 }
 $script:SevenZipHashCache = @{}
 $script:TemplateVariableDefaultExtensions = @(
@@ -65,3 +65,4 @@ Export-ModuleMember -Function @(
     'Get-TemplateStats',
     'Get-TemplaterConfigPath'
 ) -Alias @('templates', 'template', 'tpl', 'use-tpl', 'add-tpl', 'remove-tpl')
+
