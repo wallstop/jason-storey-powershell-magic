@@ -26,7 +26,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       with:
         # For workflow_run, checkout the branch to get latest commits (including auto-fix commits)
         ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || '' }}
@@ -136,7 +136,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       with:
         # For workflow_run, checkout the branch to get latest commits (including auto-fix commits)
         ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || '' }}
@@ -191,7 +191,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       with:
         # For workflow_run, checkout the branch to get latest commits (including auto-fix commits)
         ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || '' }}
