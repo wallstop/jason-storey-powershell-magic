@@ -479,8 +479,8 @@ $Dependencies = @{
         TestCommand = @('fzf', '--version')
         PortableAssets = @{
             Windows = @{
-                Url = 'https://github.com/junegunn/fzf/releases/download/v0.73.1/fzf-0.73.1-windows_amd64.zip'
-                Sha256 = '521A974DC32E93404265E55BFFAF71A59E05E80ABDF8CA4AFB21A6030DC76F5F'
+                Url = 'https://github.com/junegunn/fzf/releases/download/v0.74.0/fzf-0.74.0-windows_amd64.zip'
+                Sha256 = '614EFA4EA923A3D6715856B5F6FB6CE815ACDB0CE549E7499202808F7A7A78E7'
                 Executable = 'fzf.exe'
                 ArchiveType = 'zip'
             }
@@ -564,8 +564,8 @@ $Dependencies = @{
         TestCommand = @('eza', '--version')
         PortableAssets = @{
             Windows = @{
-                Url = 'https://github.com/eza-community/eza/releases/download/v0.23.4/eza.exe_x86_64-pc-windows-gnu.zip'
-                Sha256 = '05677FD7C2D1B69CE71DF53DB74C29F6331EA0B2BE5AA3A0FCE6976200EE06FC'
+                Url = 'https://github.com/eza-community/eza/releases/download/v0.23.5/eza.exe_x86_64-pc-windows-gnu.zip'
+                Sha256 = 'C830638C844A5B89D39BA662B5549903A71FA539018E813880F5B8AFA77BAC2E'
                 Executable = 'eza.exe'
                 ArchiveType = 'zip'
             }
@@ -1620,6 +1620,7 @@ if ($ListPortableDownloads) {
 } else {
     Main
 }
+
 
 
 
